@@ -26,6 +26,9 @@ class MinecraftServerWrapper:
         
         self.setup_ui()
         
+        # Bind window close event to save configuration
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
     def load_config(self):
         """Load server configuration from file"""
         default_config = {
@@ -118,6 +121,8 @@ class MinecraftServerWrapper:
         self.jar_entry = tk.Entry(jar_frame, width=40)
         self.jar_entry.pack(side=tk.LEFT, padx=(0, 5))
         self.jar_entry.insert(0, self.config.get("server_jar", ""))
+        self.jar_entry.bind('<FocusOut>', self.auto_save_config)
+        self.jar_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
         browse_button = tk.Button(jar_frame, text="Browse", command=self.browse_jar, bg="#3498db", fg="white")
         browse_button.pack(side=tk.LEFT)
@@ -127,21 +132,28 @@ class MinecraftServerWrapper:
         self.min_memory_entry = tk.Entry(config_grid, width=10)
         self.min_memory_entry.grid(row=1, column=1, sticky="w", padx=5, pady=2)
         self.min_memory_entry.insert(0, self.config.get("memory_min", "1G"))
+        self.min_memory_entry.bind('<FocusOut>', self.auto_save_config)
+        self.min_memory_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
         tk.Label(config_grid, text="Max Memory:", fg="#ecf0f1", bg="#34495e").grid(row=2, column=0, sticky="w", padx=5, pady=2)
         self.max_memory_entry = tk.Entry(config_grid, width=10)
         self.max_memory_entry.grid(row=2, column=1, sticky="w", padx=5, pady=2)
         self.max_memory_entry.insert(0, self.config.get("memory_max", "2G"))
+        self.max_memory_entry.bind('<FocusOut>', self.auto_save_config)
+        self.max_memory_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
         # Port
         tk.Label(config_grid, text="Server Port:", fg="#ecf0f1", bg="#34495e").grid(row=3, column=0, sticky="w", padx=5, pady=2)
         self.port_entry = tk.Entry(config_grid, width=10)
         self.port_entry.grid(row=3, column=1, sticky="w", padx=5, pady=2)
         self.port_entry.insert(0, self.config.get("server_port", "25565"))
+        self.port_entry.bind('<FocusOut>', self.auto_save_config)
+        self.port_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
         # Aikar's Flags
         self.aikars_flags_var = tk.BooleanVar()
         self.aikars_flags_var.set(self.config.get("use_aikars_flags", False))
+        self.aikars_flags_var.trace('w', self.auto_save_config_trace)
         aikars_checkbox = tk.Checkbutton(config_grid, text="Use Aikar's Flags (Optimized JVM)", 
                                         variable=self.aikars_flags_var, fg="#ecf0f1", bg="#34495e",
                                         selectcolor="#2c3e50", activebackground="#34495e",
@@ -223,6 +235,8 @@ class MinecraftServerWrapper:
         if filename:
             self.jar_entry.delete(0, tk.END)
             self.jar_entry.insert(0, filename)
+            # Auto-save when JAR is selected
+            self.auto_save_config()
     
     def save_config_ui(self):
         """Save configuration from UI"""
@@ -665,21 +679,49 @@ Created by: Aikar (Empire Minecraft)"""
                                 command=info_window.destroy,
                                 bg="#e74c3c", fg="white", font=("Arial", 10, "bold"))
         close_button.pack(pady=10)
+    
+    def auto_save_config(self, event=None):
+        """Automatically save configuration when values change"""
+        try:
+            self.config["server_jar"] = self.jar_entry.get()
+            self.config["memory_min"] = self.min_memory_entry.get()
+            self.config["memory_max"] = self.max_memory_entry.get()
+            self.config["server_port"] = self.port_entry.get()
+            self.config["use_aikars_flags"] = self.aikars_flags_var.get()
+            
+            self.save_config()
+        except Exception as e:
+            # Silently handle errors to avoid disrupting user experience
+            pass
+    
+    def auto_save_config_trace(self, *args):
+        """Auto-save config when traced variables change (for checkboxes)"""
+        self.auto_save_config()
+    
+    def schedule_auto_save(self, event=None):
+        """Schedule auto-save after a short delay to avoid saving on every keystroke"""
+        # Cancel previous scheduled save
+        if hasattr(self, '_auto_save_job'):
+            self.root.after_cancel(self._auto_save_job)
+        
+        # Schedule new save after 1 second of inactivity
+        self._auto_save_job = self.root.after(1000, self.auto_save_config)
+    
+    def on_closing(self):
+        """Handle application closing"""
+        # Save configuration before closing
+        self.auto_save_config()
+        
+        if self.server_running:
+            if messagebox.askokcancel("Quit", "Server is running. Stop server and quit?"):
+                self.stop_server()
+                self.root.destroy()
+        else:
+            self.root.destroy()
 
 def main():
     root = tk.Tk()
     app = MinecraftServerWrapper(root)
-    
-    # Handle window closing
-    def on_closing():
-        if app.server_running:
-            if messagebox.askokcancel("Quit", "Server is running. Stop server and quit?"):
-                app.stop_server()
-                root.destroy()
-        else:
-            root.destroy()
-    
-    root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
 
 if __name__ == "__main__":
