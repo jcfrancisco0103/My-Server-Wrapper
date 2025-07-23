@@ -1545,17 +1545,24 @@ Created by: Aikar (Empire Minecraft)"""
             def list_files():
                 path = request.args.get('path', '.')
                 try:
-                    # Security: Only allow access to current directory and subdirectories
-                    abs_path = os.path.abspath(path)
-                    current_dir = os.path.abspath('.')
-                    if not abs_path.startswith(current_dir):
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    
+                    # Handle relative paths from the server directory
+                    if path == '.':
+                        abs_path = server_base_dir
+                    else:
+                        abs_path = os.path.abspath(os.path.join(server_base_dir, path))
+                    
+                    # Security: Only allow access to server directory and subdirectories
+                    if not abs_path.startswith(server_base_dir):
                         return jsonify({'error': 'Access denied'}), 403
                     
                     items = []
                     if os.path.exists(abs_path) and os.path.isdir(abs_path):
                         for item in sorted(os.listdir(abs_path)):
                             item_path = os.path.join(abs_path, item)
-                            rel_path = os.path.relpath(item_path, current_dir)
+                            rel_path = os.path.relpath(item_path, server_base_dir)
                             is_dir = os.path.isdir(item_path)
                             size = 0 if is_dir else os.path.getsize(item_path)
                             modified = os.path.getmtime(item_path)
@@ -1569,7 +1576,7 @@ Created by: Aikar (Empire Minecraft)"""
                             })
                     
                     return jsonify({
-                        'current_path': os.path.relpath(abs_path, current_dir).replace('\\', '/'),
+                        'current_path': os.path.relpath(abs_path, server_base_dir).replace('\\', '/') if abs_path != server_base_dir else '.',
                         'items': items
                     })
                 except Exception as e:
@@ -1578,10 +1585,12 @@ Created by: Aikar (Empire Minecraft)"""
             @self.web_server.route('/api/file/<path:filepath>')
             def get_file(filepath):
                 try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    
                     # Security check
-                    abs_path = os.path.abspath(filepath)
-                    current_dir = os.path.abspath('.')
-                    if not abs_path.startswith(current_dir):
+                    if not abs_path.startswith(server_base_dir):
                         return jsonify({'error': 'Access denied'}), 403
                     
                     if not os.path.exists(abs_path) or os.path.isdir(abs_path):
@@ -1608,10 +1617,12 @@ Created by: Aikar (Empire Minecraft)"""
             @self.web_server.route('/api/file/<path:filepath>', methods=['POST'])
             def save_file(filepath):
                 try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    
                     # Security check
-                    abs_path = os.path.abspath(filepath)
-                    current_dir = os.path.abspath('.')
-                    if not abs_path.startswith(current_dir):
+                    if not abs_path.startswith(server_base_dir):
                         return jsonify({'error': 'Access denied'}), 403
                     
                     data = request.get_json()
@@ -1631,10 +1642,12 @@ Created by: Aikar (Empire Minecraft)"""
             @self.web_server.route('/download/<path:filepath>')
             def download_file(filepath):
                 try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    
                     # Security check
-                    abs_path = os.path.abspath(filepath)
-                    current_dir = os.path.abspath('.')
-                    if not abs_path.startswith(current_dir):
+                    if not abs_path.startswith(server_base_dir):
                         return "Access denied", 403
                     
                     if not os.path.exists(abs_path) or os.path.isdir(abs_path):
