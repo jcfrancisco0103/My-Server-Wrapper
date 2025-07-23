@@ -262,9 +262,12 @@ class MinecraftServerWrapper:
         
         # Command input field
         self.command_entry = tk.Entry(command_frame, bg="#34495e", fg="#ecf0f1", 
-                                     font=("Consolas", 9), insertbackground="#ecf0f1")
+                                     font=("Consolas", 9), insertbackground="#ecf0f1",
+                                     state=tk.NORMAL, relief=tk.SOLID, bd=1)
         self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         self.command_entry.bind("<Return>", self.send_command)
+        self.command_entry.bind("<Button-1>", self.focus_command_entry)  # Focus on click
+        self.command_entry.focus_set()  # Set initial focus to the command entry
         
         # Send button
         send_button = tk.Button(command_frame, text="Send", command=self.send_command,
@@ -447,6 +450,11 @@ class MinecraftServerWrapper:
     def send_command_from_entry(self, event=None):
         """Wrapper method for send_command to handle both button click and Enter key"""
         self.send_command(event)
+    
+    def focus_command_entry(self, event=None):
+        """Ensure command entry has focus when clicked"""
+        self.command_entry.focus_set()
+        return "break"  # Prevent default behavior
     
     def read_server_output(self):
         """Read server output in a separate thread"""
