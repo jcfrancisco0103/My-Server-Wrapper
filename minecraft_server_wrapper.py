@@ -30,6 +30,9 @@ class MinecraftServerWrapper:
         self.ram_values = []
         self.monitoring_active = False
         
+        # Initialize command/chat mode (True = Command mode, False = Chat mode)
+        self.command_mode = True
+        
         # Configuration
         self.config_file = "server_config.json"
         self.load_config()
@@ -255,10 +258,15 @@ class MinecraftServerWrapper:
         command_frame = tk.Frame(console_frame, bg="#34495e")
         command_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
-        # Command input label
-        command_label = tk.Label(command_frame, text="Command/Chat:", 
-                                font=("Arial", 9, "bold"), fg="#ecf0f1", bg="#34495e")
-        command_label.pack(side=tk.LEFT, padx=(0, 5))
+        # Mode toggle button
+        self.mode_button = tk.Button(command_frame, text="CMD", command=self.toggle_input_mode,
+                                    bg="#3498db", fg="white", font=("Arial", 9, "bold"), width=5)
+        self.mode_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Command input label (dynamic based on mode)
+        self.command_label = tk.Label(command_frame, text="Command:", 
+                                     font=("Arial", 9, "bold"), fg="#ecf0f1", bg="#34495e")
+        self.command_label.pack(side=tk.LEFT, padx=(0, 5))
         
         # Command input field
         self.command_entry = tk.Entry(command_frame, bg="#34495e", fg="#ecf0f1", 
@@ -420,7 +428,7 @@ class MinecraftServerWrapper:
         self.start_server()
     
     def send_command(self, event=None):
-        """Send command to server or as chat message"""
+        """Send command to server or as chat message based on current mode"""
         command = self.command_entry.get().strip()
         if not command:
             return
@@ -430,14 +438,12 @@ class MinecraftServerWrapper:
             return
             
         try:
-            # Check if it's a server command (starts with /) or chat message
-            if command.startswith('/'):
-                # Server command
-                actual_command = command[1:]  # Remove the leading /
-                self.log_message(f"[ADMIN COMMAND] /{actual_command}")
-                self.server_process.stdin.write(f"{actual_command}\n")
+            if self.command_mode:
+                # Command mode - send directly to server
+                self.log_message(f"[ADMIN COMMAND] {command}")
+                self.server_process.stdin.write(f"{command}\n")
             else:
-                # Chat message - use 'say' command to broadcast
+                # Chat mode - use 'say' command to broadcast
                 self.log_message(f"[ADMIN CHAT] {command}")
                 self.server_process.stdin.write(f"say [ADMIN] {command}\n")
                 
@@ -455,6 +461,24 @@ class MinecraftServerWrapper:
         """Ensure command entry has focus when clicked"""
         self.command_entry.focus_set()
         return "break"  # Prevent default behavior
+    
+    def toggle_input_mode(self):
+        """Toggle between Command mode and Chat mode"""
+        self.command_mode = not self.command_mode
+        
+        if self.command_mode:
+            # Command mode
+            self.mode_button.config(text="CMD", bg="#3498db")
+            self.command_label.config(text="Command:")
+            self.log_message("Switched to Command mode. Commands will be sent directly to server.")
+        else:
+            # Chat mode
+            self.mode_button.config(text="CHAT", bg="#e67e22")
+            self.command_label.config(text="Chat:")
+            self.log_message("Switched to Chat mode. Messages will be broadcast as admin chat.")
+        
+        # Refocus the entry field
+        self.command_entry.focus_set()
     
     def read_server_output(self):
         """Read server output in a separate thread"""
