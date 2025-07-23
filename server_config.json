@@ -1,0 +1,8 @@
+{
+    "server_jar": "",
+    "java_path": "java",
+    "memory_min": "1G",
+    "memory_max": "2G",
+    "server_port": "25565",
+    "additional_args": ""
+}
