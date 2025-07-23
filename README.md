@@ -7,8 +7,16 @@ A user-friendly Python GUI application for managing Minecraft servers.
 - **Easy Server Management**: Start, stop, and restart your Minecraft server with simple buttons
 - **Real-time Console**: View server logs and send commands directly from the GUI
 - **Configuration Management**: Set memory allocation, server port, and JAR file location
+- **Server Properties Editor**: Open and edit server.properties file directly from the wrapper
 - **User-friendly Interface**: Clean, modern dark theme interface
 - **Auto-save Settings**: Your configuration is automatically saved and loaded
+
+## New Server Properties Features
+
+- **Open server.properties**: Opens the file in your default text editor
+- **Edit in Wrapper**: Built-in editor window for editing properties without leaving the application
+- **Reload Properties**: Send reload command to running server to apply changes
+- **Auto-create Properties**: Automatically creates a default server.properties file if none exists
 
 ## Requirements
 
@@ -45,6 +53,12 @@ A user-friendly Python GUI application for managing Minecraft servers.
 4. **Console Commands**:
    - Type commands in the command field and press Enter or click "Send"
    - Common commands: `list`, `say <message>`, `op <player>`, `stop`
+
+5. **Server Properties Management**:
+   - **Open server.properties**: Click to open the file in your default text editor (Notepad, VS Code, etc.)
+   - **Edit in Wrapper**: Opens a built-in editor window for convenient editing without leaving the application
+   - **Reload Properties**: Sends a reload command to the running server to apply property changes
+   - If no server.properties file exists, the wrapper will create a default one with common settings
 
 ## Configuration
 
