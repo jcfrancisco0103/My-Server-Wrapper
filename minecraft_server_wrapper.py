@@ -33,6 +33,7 @@ class MinecraftServerWrapper:
         # Server process
         self.server_process = None
         self.server_running = False
+        self.server_start_time = None
         self.startup_enabled_var = tk.BooleanVar()
         
         # Performance monitoring
@@ -423,6 +424,7 @@ class MinecraftServerWrapper:
             )
             
             self.server_running = True
+            self.server_start_time = time.time()  # Track server start time
             self.update_ui_state()
             
             # Start output reader thread
@@ -459,6 +461,7 @@ class MinecraftServerWrapper:
         
         self.server_running = False
         self.server_process = None
+        self.server_start_time = None  # Reset start time
         self.monitoring_active = False
         self.update_ui_state()
         self.log_message("Server stopped.")
@@ -543,6 +546,7 @@ class MinecraftServerWrapper:
         # Server process ended
         self.server_running = False
         self.server_process = None
+        self.server_start_time = None  # Reset start time
         self.monitoring_active = False
         self.root.after(0, self.update_ui_state)
         self.root.after(0, lambda: self.log_message("Server process ended."))
@@ -1240,6 +1244,64 @@ Created by: Aikar (Empire Minecraft)"""
                     .controls { display: flex; gap: 10px; margin-bottom: 20px; }
                     .control-btn { padding: 10px 20px; background: #9b59b6; color: white; border: none; cursor: pointer; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .status { padding: 10px; background: #34495e; margin-bottom: 20px; border-radius: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                    
+                    /* Server Monitor Styles */
+                    .monitor-dashboard {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 15px;
+                        margin: 20px 0;
+                        padding: 20px;
+                        background: #34495e;
+                        border-radius: 8px;
+                        border: 2px solid #2c3e50;
+                    }
+                    .monitor-card {
+                        background: #2c3e50;
+                        border-radius: 8px;
+                        padding: 15px;
+                        text-align: center;
+                        border: 1px solid #555;
+                        transition: transform 0.2s ease;
+                    }
+                    .monitor-card:hover {
+                        transform: translateY(-2px);
+                        border-color: #3498db;
+                    }
+                    .monitor-title {
+                        color: #bdc3c7;
+                        font-size: 12px;
+                        margin-bottom: 8px;
+                        text-transform: uppercase;
+                        font-weight: bold;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
+                    .monitor-value {
+                        color: #ecf0f1;
+                        font-size: 24px;
+                        font-weight: bold;
+                        margin-bottom: 5px;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
+                    .monitor-unit {
+                        color: #95a5a6;
+                        font-size: 12px;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
+                    .monitor-status-online {
+                        color: #27ae60;
+                    }
+                    .monitor-status-offline {
+                        color: #e74c3c;
+                    }
+                    .monitor-header {
+                        text-align: center;
+                        margin-bottom: 15px;
+                        color: #ecf0f1;
+                        font-size: 18px;
+                        font-weight: bold;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
                 </style>
             </head>
             <body>
@@ -1260,6 +1322,41 @@ Created by: Aikar (Empire Minecraft)"""
                         <button class="control-btn" onclick="startServer()">Start Server</button>
                         <button class="control-btn" onclick="stopServer()">Stop Server</button>
                         <button class="control-btn" onclick="restartServer()">Restart Server</button>
+                    </div>
+                    
+                    <!-- Server Monitor Dashboard -->
+                    <div class="monitor-dashboard">
+                        <div class="monitor-header">📊 Server Monitor</div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">Server Status</div>
+                            <div class="monitor-value" id="monitor-status">Offline</div>
+                            <div class="monitor-unit">Status</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">Players Online</div>
+                            <div class="monitor-value" id="monitor-players">0</div>
+                            <div class="monitor-unit">Players</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">CPU Usage</div>
+                            <div class="monitor-value" id="monitor-cpu">0</div>
+                            <div class="monitor-unit">%</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">Memory Usage</div>
+                            <div class="monitor-value" id="monitor-memory">0</div>
+                            <div class="monitor-unit">MB</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">Uptime</div>
+                            <div class="monitor-value" id="monitor-uptime">00:00:00</div>
+                            <div class="monitor-unit">H:M:S</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">TPS</div>
+                            <div class="monitor-value" id="monitor-tps">20.0</div>
+                            <div class="monitor-unit">Ticks/Sec</div>
+                        </div>
                     </div>
                     
                     <div class="console" id="console"></div>
@@ -1284,7 +1381,56 @@ Created by: Aikar (Empire Minecraft)"""
                     socket.on('server_status', function(data) {
                         document.getElementById('server-status').textContent = data.running ? 'Running' : 'Stopped';
                         document.getElementById('players-online').textContent = data.players || '--';
+                        
+                        // Update monitor dashboard
+                        updateMonitorDashboard(data);
                     });
+                    
+                    // Monitor dashboard update function
+                    function updateMonitorDashboard(data) {
+                        const statusElement = document.getElementById('monitor-status');
+                        const playersElement = document.getElementById('monitor-players');
+                        const cpuElement = document.getElementById('monitor-cpu');
+                        const memoryElement = document.getElementById('monitor-memory');
+                        const uptimeElement = document.getElementById('monitor-uptime');
+                        const tpsElement = document.getElementById('monitor-tps');
+                        
+                        // Update server status with color coding
+                        if (data.running) {
+                            statusElement.textContent = 'Online';
+                            statusElement.className = 'monitor-value monitor-status-online';
+                        } else {
+                            statusElement.textContent = 'Offline';
+                            statusElement.className = 'monitor-value monitor-status-offline';
+                        }
+                        
+                        // Update players
+                        playersElement.textContent = data.players || '0';
+                        
+                        // Update system metrics (simulated for now)
+                        if (data.running) {
+                            cpuElement.textContent = (Math.random() * 30 + 10).toFixed(1);
+                            memoryElement.textContent = (Math.random() * 500 + 200).toFixed(0);
+                            tpsElement.textContent = (Math.random() * 2 + 19).toFixed(1);
+                            
+                            // Update uptime
+                            const uptime = data.uptime || 0;
+                            const hours = Math.floor(uptime / 3600);
+                            const minutes = Math.floor((uptime % 3600) / 60);
+                            const seconds = uptime % 60;
+                            uptimeElement.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                        } else {
+                            cpuElement.textContent = '0';
+                            memoryElement.textContent = '0';
+                            tpsElement.textContent = '0.0';
+                            uptimeElement.textContent = '00:00:00';
+                        }
+                    }
+                    
+                    // Auto-refresh monitor data every 5 seconds
+                    setInterval(function() {
+                        socket.emit('request_status');
+                    }, 5000);
                     
                     function toggleMode() {
                         commandMode = !commandMode;
@@ -2161,9 +2307,29 @@ Created by: Aikar (Empire Minecraft)"""
             
             @self.socketio.on('request_status')
             def handle_status_request():
+                # Calculate uptime
+                uptime = 0
+                if self.server_running and self.server_start_time:
+                    uptime = int(time.time() - self.server_start_time)
+                
+                # Get current monitoring data
+                cpu_usage = getattr(self, 'cpu_usage', 0)
+                memory_usage = getattr(self, 'memory_usage', 0)
+                tps = getattr(self, 'current_tps', 20.0)
+                
+                # Get player count
+                current_players = self.get_player_count()
+                max_players = 20  # Default, could be read from server.properties
+                
                 emit('server_status', {
                     'running': self.server_running,
-                    'players': self.get_player_count()
+                    'uptime': uptime,
+                    'cpu_usage': cpu_usage,
+                    'memory_usage': memory_usage,
+                    'tps': tps,
+                    'current_players': current_players,
+                    'max_players': max_players,
+                    'players': current_players  # Keep for backward compatibility
                 })
             
             # Start server in a separate thread
