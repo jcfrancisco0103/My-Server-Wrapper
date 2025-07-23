@@ -2375,6 +2375,17 @@ Created by: Aikar (Empire Minecraft)"""
                         border-left: 3px solid #3498db;
                     }
                     
+                    .file-item.selected {
+                        background: rgba(46, 204, 113, 0.2);
+                        border-left: 3px solid #2ecc71;
+                        transform: translateX(5px);
+                    }
+                    
+                    .file-item.selected:hover {
+                        background: rgba(46, 204, 113, 0.3);
+                        border-left: 3px solid #27ae60;
+                    }
+                    
                     .file-icon { 
                         margin-right: 15px; 
                         width: 20px; 
@@ -2670,6 +2681,35 @@ Created by: Aikar (Empire Minecraft)"""
                         box-shadow: 0 8px 25px rgba(155, 89, 182, 0.4);
                     }
                     
+                    .btn.delete { 
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                    }
+                    
+                    .btn.delete:hover {
+                        box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
+                    }
+                    
+                    .btn.rename { 
+                        background: linear-gradient(45deg, #f39c12, #e67e22);
+                    }
+                    
+                    .btn.rename:hover {
+                        box-shadow: 0 8px 25px rgba(243, 156, 18, 0.4);
+                    }
+                    
+                    .btn:disabled {
+                        background: rgba(127, 140, 141, 0.5);
+                        cursor: not-allowed;
+                        opacity: 0.6;
+                        transform: none;
+                        box-shadow: none;
+                    }
+                    
+                    .btn:disabled:hover {
+                        transform: none;
+                        box-shadow: none;
+                    }
+                    
                     .modal { 
                         display: none; 
                         position: fixed; 
@@ -2876,6 +2916,8 @@ Created by: Aikar (Empire Minecraft)"""
                                  <h3>📂 Server Files</h3>
                                  <div class="file-actions">
                                      <button class="btn new" onclick="showNewFileModal()">📄 New File</button>
+                                     <button class="btn delete" id="delete-btn" onclick="deleteSelectedFile()" disabled>🗑️ Delete</button>
+                                     <button class="btn rename" id="rename-btn" onclick="renameSelectedFile()" disabled>✏️ Rename</button>
                                  </div>
                              </div>
                             <div class="breadcrumb" id="breadcrumb">Loading...</div>
@@ -2978,6 +3020,12 @@ Created by: Aikar (Empire Minecraft)"""
                                     `;
                                     
                                     fileItem.onclick = (e) => {
+                                        // Clear previous selection
+                                        document.querySelectorAll('.file-item.selected').forEach(el => el.classList.remove('selected'));
+                                        // Select current item
+                                        fileItem.classList.add('selected');
+                                        updateActionButtons();
+                                        
                                         if (item.is_directory) {
                                             loadFiles(item.path);
                                         } else {
@@ -3245,6 +3293,86 @@ Created by: Aikar (Empire Minecraft)"""
                      // Update monitor every 2 seconds
                      setInterval(updateServerMonitor, 2000);
                      updateServerMonitor(); // Initial update
+                     
+                     // File Management Functions
+                     function updateActionButtons() {
+                         const selectedFile = document.querySelector('.file-item.selected');
+                         const deleteBtn = document.getElementById('delete-btn');
+                         const renameBtn = document.getElementById('rename-btn');
+                         
+                         if (selectedFile) {
+                             deleteBtn.disabled = false;
+                             renameBtn.disabled = false;
+                         } else {
+                             deleteBtn.disabled = true;
+                             renameBtn.disabled = true;
+                         }
+                     }
+                     
+                     function deleteSelectedFile() {
+                         const selectedFile = document.querySelector('.file-item.selected');
+                         if (!selectedFile) {
+                             alert('Please select a file to delete');
+                             return;
+                         }
+                         
+                         const fileName = selectedFile.dataset.name;
+                         const filePath = selectedFile.dataset.path;
+                         
+                         if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
+                             fetch(`/api/file/${encodeURIComponent(filePath)}`, {
+                                 method: 'DELETE'
+                             })
+                             .then(response => response.json())
+                             .then(data => {
+                                 if (data.error) {
+                                     alert('Error deleting file: ' + data.error);
+                                 } else {
+                                     alert('File deleted successfully!');
+                                     loadFiles(currentPath); // Refresh file list
+                                 }
+                             })
+                             .catch(error => {
+                                 console.error('Error deleting file:', error);
+                                 alert('Error deleting file: ' + error.message);
+                             });
+                         }
+                     }
+                     
+                     function renameSelectedFile() {
+                         const selectedFile = document.querySelector('.file-item.selected');
+                         if (!selectedFile) {
+                             alert('Please select a file to rename');
+                             return;
+                         }
+                         
+                         const fileName = selectedFile.dataset.name;
+                         const filePath = selectedFile.dataset.path;
+                         
+                         const newName = prompt(`Enter new name for "${fileName}":`, fileName);
+                         if (newName && newName !== fileName) {
+                             fetch(`/api/file/${encodeURIComponent(filePath)}/rename`, {
+                                 method: 'POST',
+                                 headers: {
+                                     'Content-Type': 'application/json',
+                                 },
+                                 body: JSON.stringify({ new_name: newName })
+                             })
+                             .then(response => response.json())
+                             .then(data => {
+                                 if (data.error) {
+                                     alert('Error renaming file: ' + data.error);
+                                 } else {
+                                     alert('File renamed successfully!');
+                                     loadFiles(currentPath); // Refresh file list
+                                 }
+                             })
+                             .catch(error => {
+                                 console.error('Error renaming file:', error);
+                                 alert('Error renaming file: ' + error.message);
+                             });
+                         }
+                     }
                 </script>
             </body>
             </html>
@@ -3352,6 +3480,70 @@ Created by: Aikar (Empire Minecraft)"""
                         f.write(content)
                     
                     self.log_message(f"[WEB] File saved: {filepath}")
+                    return jsonify({'success': True})
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/api/file/<path:filepath>', methods=['DELETE'])
+            def delete_file(filepath):
+                try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    
+                    # Security check
+                    if not abs_path.startswith(server_base_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    if not os.path.exists(abs_path):
+                        return jsonify({'error': 'File not found'}), 404
+                    
+                    if os.path.isdir(abs_path):
+                        import shutil
+                        shutil.rmtree(abs_path)
+                        self.log_message(f"[WEB] Directory deleted: {filepath}")
+                    else:
+                        os.remove(abs_path)
+                        self.log_message(f"[WEB] File deleted: {filepath}")
+                    
+                    return jsonify({'success': True})
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/api/file/<path:filepath>/rename', methods=['POST'])
+            def rename_file(filepath):
+                try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    
+                    # Security check
+                    if not abs_path.startswith(server_base_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    if not os.path.exists(abs_path):
+                        return jsonify({'error': 'File not found'}), 404
+                    
+                    data = request.get_json()
+                    new_name = data.get('new_name', '').strip()
+                    
+                    if not new_name:
+                        return jsonify({'error': 'New name is required'}), 400
+                    
+                    # Construct new path
+                    parent_dir = os.path.dirname(abs_path)
+                    new_abs_path = os.path.join(parent_dir, new_name)
+                    
+                    # Security check for new path
+                    if not new_abs_path.startswith(server_base_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    if os.path.exists(new_abs_path):
+                        return jsonify({'error': 'A file with that name already exists'}), 400
+                    
+                    os.rename(abs_path, new_abs_path)
+                    self.log_message(f"[WEB] File renamed: {filepath} -> {new_name}")
+                    
                     return jsonify({'success': True})
                 except Exception as e:
                     return jsonify({'error': str(e)}), 500
