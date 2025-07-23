@@ -34,7 +34,8 @@ class MinecraftServerWrapper:
             "memory_min": "1G",
             "memory_max": "2G",
             "server_port": "25565",
-            "additional_args": ""
+            "additional_args": "",
+            "use_aikars_flags": False
         }
         
         try:
@@ -138,10 +139,24 @@ class MinecraftServerWrapper:
         self.port_entry.grid(row=3, column=1, sticky="w", padx=5, pady=2)
         self.port_entry.insert(0, self.config.get("server_port", "25565"))
         
+        # Aikar's Flags
+        self.aikars_flags_var = tk.BooleanVar()
+        self.aikars_flags_var.set(self.config.get("use_aikars_flags", False))
+        aikars_checkbox = tk.Checkbutton(config_grid, text="Use Aikar's Flags (Optimized JVM)", 
+                                        variable=self.aikars_flags_var, fg="#ecf0f1", bg="#34495e",
+                                        selectcolor="#2c3e50", activebackground="#34495e",
+                                        activeforeground="#ecf0f1", font=("Arial", 9))
+        aikars_checkbox.grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
+        # Info button for Aikar's Flags
+        info_button = tk.Button(config_grid, text="ℹ️ Info", command=self.show_aikars_info,
+                               bg="#3498db", fg="white", font=("Arial", 8), width=8)
+        info_button.grid(row=4, column=1, sticky="e", padx=5, pady=5)
+        
         # Save config button
         save_config_button = tk.Button(config_grid, text="Save Config", command=self.save_config_ui,
                                       bg="#9b59b6", fg="white", font=("Arial", 9, "bold"))
-        save_config_button.grid(row=4, column=0, columnspan=2, pady=10)
+        save_config_button.grid(row=5, column=0, columnspan=2, pady=10)
         
         # Server properties management
         properties_frame = tk.Frame(config_frame, bg="#34495e")
@@ -215,6 +230,7 @@ class MinecraftServerWrapper:
         self.config["memory_min"] = self.min_memory_entry.get()
         self.config["memory_max"] = self.max_memory_entry.get()
         self.config["server_port"] = self.port_entry.get()
+        self.config["use_aikars_flags"] = self.aikars_flags_var.get()
         
         self.save_config()
         self.log_message("Configuration saved successfully!")
@@ -242,15 +258,20 @@ class MinecraftServerWrapper:
             java_path = self.config.get("java_path", "java")
             min_mem = self.min_memory_entry.get()
             max_mem = self.max_memory_entry.get()
+            use_aikars = self.config.get("use_aikars_flags", False)
             
-            command = [
-                java_path,
-                f"-Xms{min_mem}",
-                f"-Xmx{max_mem}",
-                "-jar",
-                jar_path,
-                "nogui"
-            ]
+            command = [java_path]
+            
+            # Add Aikar's Flags if enabled
+            if use_aikars:
+                aikars_flags = self.get_aikars_flags(min_mem, max_mem)
+                command.extend(aikars_flags)
+                self.log_message("Using Aikar's Flags for optimized performance")
+            else:
+                command.extend([f"-Xms{min_mem}", f"-Xmx{max_mem}"])
+            
+            # Add JAR and nogui
+            command.extend(["-jar", jar_path, "nogui"])
             
             # Change to server directory
             server_dir = os.path.dirname(jar_path)
@@ -557,6 +578,93 @@ white-list=false
         except Exception as e:
             self.log_message(f"Failed to send command '{command}': {str(e)}")
             return False
+    
+    def get_aikars_flags(self, min_mem, max_mem):
+        """Get Aikar's optimized JVM flags"""
+        # Aikar's flags for optimal Minecraft server performance
+        # These flags are designed to reduce lag and improve garbage collection
+        flags = [
+            f"-Xms{min_mem}",
+            f"-Xmx{max_mem}",
+            "-XX:+UseG1GC",
+            "-XX:+ParallelRefProcEnabled",
+            "-XX:MaxGCPauseMillis=200",
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:+DisableExplicitGC",
+            "-XX:+AlwaysPreTouch",
+            "-XX:G1NewSizePercent=30",
+            "-XX:G1MaxNewSizePercent=40",
+            "-XX:G1HeapRegionSize=8M",
+            "-XX:G1ReservePercent=20",
+            "-XX:G1HeapWastePercent=5",
+            "-XX:G1MixedGCCountTarget=4",
+            "-XX:InitiatingHeapOccupancyPercent=15",
+            "-XX:G1MixedGCLiveThresholdPercent=90",
+            "-XX:G1RSetUpdatingPauseTimePercent=5",
+            "-XX:SurvivorRatio=32",
+            "-XX:+PerfDisableSharedMem",
+            "-XX:MaxTenuringThreshold=1",
+            "-Dusing.aikars.flags=https://mcflags.emc.gs",
+            "-Daikars.new.flags=true"
+        ]
+        return flags
+    
+    def show_aikars_info(self):
+        """Show information about Aikar's Flags"""
+        info_text = """Aikar's Flags - Optimized JVM Arguments
+
+What are Aikar's Flags?
+Aikar's Flags are a set of carefully tuned JVM (Java Virtual Machine) arguments 
+designed specifically for Minecraft servers to improve performance and reduce lag.
+
+Benefits:
+• Reduced garbage collection pauses
+• Better memory management
+• Improved server tick performance
+• Reduced lag spikes
+• Optimized for Minecraft's memory usage patterns
+
+These flags use the G1 garbage collector with optimized settings that work well 
+for most Minecraft servers, especially those with 2GB+ of RAM.
+
+Recommended for:
+• Servers with 2GB or more RAM
+• Servers experiencing lag or memory issues
+• Production servers with multiple players
+
+Note: These flags are most effective with Java 8+ and work best with 
+adequate RAM allocation (2GB minimum recommended).
+
+Source: https://mcflags.emc.gs
+Created by: Aikar (Empire Minecraft)"""
+        
+        # Create info window
+        info_window = tk.Toplevel(self.root)
+        info_window.title("Aikar's Flags Information")
+        info_window.geometry("500x400")
+        info_window.configure(bg="#2c3e50")
+        
+        # Title
+        title_label = tk.Label(info_window, text="Aikar's Flags Information", 
+                              font=("Arial", 14, "bold"), fg="#ecf0f1", bg="#2c3e50")
+        title_label.pack(pady=10)
+        
+        # Text area
+        text_frame = tk.Frame(info_window, bg="#2c3e50")
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        
+        info_text_widget = scrolledtext.ScrolledText(text_frame, height=20, 
+                                                    bg="#1e1e1e", fg="#ecf0f1", 
+                                                    font=("Arial", 10), wrap=tk.WORD)
+        info_text_widget.pack(fill=tk.BOTH, expand=True)
+        info_text_widget.insert(tk.END, info_text)
+        info_text_widget.config(state=tk.DISABLED)  # Make read-only
+        
+        # Close button
+        close_button = tk.Button(info_window, text="Close", 
+                                command=info_window.destroy,
+                                bg="#e74c3c", fg="white", font=("Arial", 10, "bold"))
+        close_button.pack(pady=10)
 
 def main():
     root = tk.Tk()

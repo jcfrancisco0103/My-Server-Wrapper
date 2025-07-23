@@ -8,6 +8,7 @@ A user-friendly Python GUI application for managing Minecraft servers.
 - **Real-time Console**: View server logs and send commands directly from the GUI
 - **Configuration Management**: Set memory allocation, server port, and JAR file location
 - **Server Properties Editor**: Open and edit server.properties file directly from the wrapper
+- **Aikar's Flags Support**: Enable optimized JVM arguments for better server performance
 - **User-friendly Interface**: Clean, modern dark theme interface
 - **Auto-save Settings**: Your configuration is automatically saved and loaded
 
@@ -17,6 +18,14 @@ A user-friendly Python GUI application for managing Minecraft servers.
 - **Edit in Wrapper**: Built-in editor window for editing properties without leaving the application
 - **Reload Properties**: Send reload command to running server to apply changes
 - **Auto-create Properties**: Automatically creates a default server.properties file if none exists
+
+## Aikar's Flags Feature
+
+- **Performance Optimization**: Enable Aikar's Flags for optimized JVM arguments
+- **Reduced Lag**: Specially tuned garbage collection settings to minimize server lag
+- **Easy Toggle**: Simple checkbox to enable/disable optimized flags
+- **Information Panel**: Built-in guide explaining what Aikar's Flags do and their benefits
+- **Automatic Integration**: Seamlessly replaces standard JVM arguments when enabled
 
 ## Requirements
 
@@ -60,6 +69,12 @@ A user-friendly Python GUI application for managing Minecraft servers.
    - **Reload Properties**: Sends a reload command to the running server to apply property changes
    - If no server.properties file exists, the wrapper will create a default one with common settings
 
+6. **Aikar's Flags (Performance Optimization)**:
+   - Check the "Use Aikar's Flags (Optimized JVM)" checkbox to enable performance optimization
+   - Click the "ℹ️ Info" button to learn more about what Aikar's Flags do
+   - Recommended for servers with 2GB+ RAM and multiple players
+   - Automatically replaces standard JVM arguments with optimized ones when enabled
+
 ## Configuration
 
 The application saves your settings in `server_config.json`. You can manually edit this file if needed:
@@ -71,7 +86,8 @@ The application saves your settings in `server_config.json`. You can manually ed
     "memory_min": "1G",
     "memory_max": "2G",
     "server_port": "25565",
-    "additional_args": ""
+    "additional_args": "",
+    "use_aikars_flags": false
 }
 ```
 
