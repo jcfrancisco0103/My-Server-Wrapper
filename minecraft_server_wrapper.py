@@ -3602,7 +3602,7 @@ Created by: Aikar (Empire Minecraft)"""
             def delete_file(filepath):
                 try:
                     # Set the server directory as the base path
-                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    server_base_dir = os.path.abspath('C:\Users\MersYeon\Desktop\Cacasians')
                     abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
                     
                     # Security check
@@ -3629,7 +3629,7 @@ Created by: Aikar (Empire Minecraft)"""
             def rename_file(filepath):
                 try:
                     # Set the server directory as the base path
-                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    server_base_dir = os.path.abspath('C:\Users\MersYeon\Desktop\Cacasians')
                     abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
                     
                     # Security check
