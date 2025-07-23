@@ -11,6 +11,9 @@ import sys
 import psutil
 import re
 import winreg
+from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask_socketio import SocketIO, emit
+from werkzeug.serving import make_server
 
 class MinecraftServerWrapper:
     def __init__(self, root):
@@ -33,6 +36,13 @@ class MinecraftServerWrapper:
         # Initialize command/chat mode (True = Command mode, False = Chat mode)
         self.command_mode = True
         
+        # Web server for remote access
+        self.web_server = None
+        self.web_server_thread = None
+        self.web_server_running = False
+        self.remote_access_enabled = tk.BooleanVar()
+        self.web_port = 5000
+        
         # Configuration
         self.config_file = "server_config.json"
         self.load_config()
@@ -45,6 +55,10 @@ class MinecraftServerWrapper:
         
         # Set startup_enabled_var from config
         self.startup_enabled_var.set(self.config.get("startup_enabled", False))
+        
+        # Set remote access settings from config
+        self.remote_access_enabled.set(self.config.get("remote_access_enabled", False))
+        self.web_port = self.config.get("web_port", 5000)
         
         self.setup_ui()
         
@@ -62,7 +76,9 @@ class MinecraftServerWrapper:
             "additional_args": "",
             "use_aikars_flags": False,
             "auto_start_server": False,
-            "startup_enabled": False
+            "startup_enabled": False,
+            "remote_access_enabled": False,
+            "web_port": 5000
         }
         
         try:
@@ -208,10 +224,24 @@ class MinecraftServerWrapper:
                                         command=self.toggle_windows_startup)
         startup_checkbox.grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=5)
         
+        # Remote access checkbox
+        remote_access_checkbox = tk.Checkbutton(config_grid, text="Enable Remote Access (Web Interface)", 
+                                               variable=self.remote_access_enabled, fg="#ecf0f1", bg="#34495e",
+                                               selectcolor="#2c3e50", activebackground="#34495e",
+                                               activeforeground="#ecf0f1", font=("Arial", 9),
+                                               command=self.toggle_remote_access)
+        remote_access_checkbox.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
+        # Web port configuration
+        tk.Label(config_grid, text="Web Port:", fg="#ecf0f1", bg="#34495e", font=("Arial", 9)).grid(row=8, column=0, sticky="w", padx=5, pady=5)
+        self.web_port_entry = tk.Entry(config_grid, bg="#34495e", fg="#ecf0f1", font=("Arial", 9), width=10)
+        self.web_port_entry.insert(0, str(self.config.get("web_port", 5000)))
+        self.web_port_entry.grid(row=8, column=1, sticky="w", padx=5, pady=5)
+        
         # Save config button
         save_config_button = tk.Button(config_grid, text="Save Config", command=self.save_config_ui,
                                       bg="#9b59b6", fg="white", font=("Arial", 9, "bold"))
-        save_config_button.grid(row=6, column=0, columnspan=2, pady=10)
+        save_config_button.grid(row=9, column=0, columnspan=2, pady=10)
         
         # Server properties management
         properties_frame = tk.Frame(config_frame, bg="#34495e")
@@ -315,6 +345,8 @@ class MinecraftServerWrapper:
         self.config["use_aikars_flags"] = self.aikars_flags_var.get()
         self.config["auto_start_server"] = self.auto_start_var.get()
         self.config["startup_enabled"] = self.startup_enabled_var.get()
+        self.config["remote_access_enabled"] = self.remote_access_enabled.get()
+        self.config["web_port"] = int(self.web_port_entry.get())
         
         self.save_config()
         self.log_message("Configuration saved successfully!")
@@ -330,6 +362,9 @@ class MinecraftServerWrapper:
         self.console_output.see(tk.END)
         # Disable text widget to make it read-only
         self.console_output.config(state=tk.DISABLED)
+        
+        # Broadcast to web clients
+        self.broadcast_console_output(formatted_message.strip())
     
     def start_server(self):
         """Start the Minecraft server"""
@@ -1124,6 +1159,245 @@ Created by: Aikar (Empire Minecraft)"""
                 
         except Exception:
             return False
+    
+    def toggle_remote_access(self):
+        """Toggle remote access web server"""
+        try:
+            if self.remote_access_enabled.get():
+                self.start_web_server()
+                self.log_message("Remote access enabled! Web interface starting...")
+            else:
+                self.stop_web_server()
+                self.log_message("Remote access disabled. Web interface stopped.")
+            
+            # Auto-save the configuration
+            self.auto_save_config()
+            
+        except Exception as e:
+            self.log_message(f"Error managing remote access: {str(e)}")
+            # Revert the checkbox state on error
+            self.remote_access_enabled.set(not self.remote_access_enabled.get())
+    
+    def start_web_server(self):
+        """Start the Flask web server for remote access"""
+        if self.web_server_running:
+            return
+        
+        try:
+            from flask import Flask, render_template_string, request, jsonify
+            from flask_socketio import SocketIO, emit
+            
+            # Create Flask app
+            self.web_server = Flask(__name__)
+            self.web_server.config['SECRET_KEY'] = 'minecraft_server_wrapper_secret'
+            self.socketio = SocketIO(self.web_server, cors_allowed_origins="*")
+            
+            # Get port from config
+            port = int(self.web_port_entry.get())
+            
+            # HTML template for the web interface
+            html_template = '''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Cacasians - Remote Server Control</title>
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+                <style>
+                    body { font-family: Arial, sans-serif; background: #2c3e50; color: #ecf0f1; margin: 0; padding: 20px; }
+                    .container { max-width: 1200px; margin: 0 auto; }
+                    .header { text-align: center; margin-bottom: 30px; }
+                    .console { background: #1e1e1e; color: #00ff00; padding: 15px; height: 400px; overflow-y: scroll; font-family: monospace; border: 2px solid #34495e; }
+                    .input-section { margin-top: 20px; display: flex; gap: 10px; }
+                    .mode-btn { padding: 10px 20px; background: #3498db; color: white; border: none; cursor: pointer; }
+                    .mode-btn.chat { background: #e67e22; }
+                    input[type="text"] { flex: 1; padding: 10px; background: #34495e; color: #ecf0f1; border: 1px solid #555; }
+                    .send-btn { padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; }
+                    .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+                    .control-btn { padding: 10px 20px; background: #9b59b6; color: white; border: none; cursor: pointer; }
+                    .status { padding: 10px; background: #34495e; margin-bottom: 20px; border-radius: 5px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🎮 Cacasians - Remote Server Control</h1>
+                        <div class="status">
+                            <strong>Server Status:</strong> <span id="server-status">Checking...</span> |
+                            <strong>Players Online:</strong> <span id="players-online">--</span>
+                        </div>
+                    </div>
+                    
+                    <div class="controls">
+                        <button class="control-btn" onclick="startServer()">Start Server</button>
+                        <button class="control-btn" onclick="stopServer()">Stop Server</button>
+                        <button class="control-btn" onclick="restartServer()">Restart Server</button>
+                    </div>
+                    
+                    <div class="console" id="console"></div>
+                    
+                    <div class="input-section">
+                        <button class="mode-btn" id="mode-btn" onclick="toggleMode()">CMD</button>
+                        <input type="text" id="command-input" placeholder="Enter command..." onkeypress="handleKeyPress(event)">
+                        <button class="send-btn" onclick="sendCommand()">Send</button>
+                    </div>
+                </div>
+                
+                <script>
+                    const socket = io();
+                    let commandMode = true;
+                    
+                    socket.on('console_output', function(data) {
+                        const console = document.getElementById('console');
+                        console.innerHTML += data.message + '<br>';
+                        console.scrollTop = console.scrollHeight;
+                    });
+                    
+                    socket.on('server_status', function(data) {
+                        document.getElementById('server-status').textContent = data.running ? 'Running' : 'Stopped';
+                        document.getElementById('players-online').textContent = data.players || '--';
+                    });
+                    
+                    function toggleMode() {
+                        commandMode = !commandMode;
+                        const btn = document.getElementById('mode-btn');
+                        const input = document.getElementById('command-input');
+                        
+                        if (commandMode) {
+                            btn.textContent = 'CMD';
+                            btn.className = 'mode-btn';
+                            input.placeholder = 'Enter command...';
+                        } else {
+                            btn.textContent = 'CHAT';
+                            btn.className = 'mode-btn chat';
+                            input.placeholder = 'Enter chat message...';
+                        }
+                    }
+                    
+                    function sendCommand() {
+                        const input = document.getElementById('command-input');
+                        const command = input.value.trim();
+                        if (command) {
+                            socket.emit('send_command', {command: command, mode: commandMode ? 'command' : 'chat'});
+                            input.value = '';
+                        }
+                    }
+                    
+                    function handleKeyPress(event) {
+                        if (event.key === 'Enter') {
+                            sendCommand();
+                        }
+                    }
+                    
+                    function startServer() {
+                        socket.emit('server_control', {action: 'start'});
+                    }
+                    
+                    function stopServer() {
+                        socket.emit('server_control', {action: 'stop'});
+                    }
+                    
+                    function restartServer() {
+                        socket.emit('server_control', {action: 'restart'});
+                    }
+                    
+                    // Request initial status
+                    socket.emit('request_status');
+                </script>
+            </body>
+            </html>
+            '''
+            
+            @self.web_server.route('/')
+            def index():
+                return render_template_string(html_template)
+            
+            @self.socketio.on('send_command')
+            def handle_command(data):
+                command = data.get('command', '').strip()
+                mode = data.get('mode', 'command')
+                
+                if command:
+                    if mode == 'command':
+                        self.send_server_command(command)
+                    else:  # chat mode
+                        self.send_server_command(f"say [ADMIN] {command}")
+            
+            @self.socketio.on('server_control')
+            def handle_server_control(data):
+                action = data.get('action')
+                if action == 'start':
+                    self.start_server()
+                elif action == 'stop':
+                    self.stop_server()
+                elif action == 'restart':
+                    self.restart_server()
+            
+            @self.socketio.on('request_status')
+            def handle_status_request():
+                emit('server_status', {
+                    'running': self.server_running,
+                    'players': self.get_player_count()
+                })
+            
+            # Start server in a separate thread
+            def run_server():
+                try:
+                    self.socketio.run(self.web_server, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+                except Exception as e:
+                    self.log_message(f"Web server error: {str(e)}")
+                    self.web_server_running = False
+            
+            self.web_server_thread = threading.Thread(target=run_server, daemon=True)
+            self.web_server_thread.start()
+            self.web_server_running = True
+            
+            self.log_message(f"Web interface started on http://0.0.0.0:{port}")
+            self.log_message("Remote users can now access the server control panel!")
+            
+        except ImportError:
+            self.log_message("Error: Flask and Flask-SocketIO are required for remote access.")
+            self.log_message("Please install them with: pip install flask flask-socketio")
+            self.remote_access_enabled.set(False)
+        except Exception as e:
+            self.log_message(f"Failed to start web server: {str(e)}")
+            self.remote_access_enabled.set(False)
+    
+    def stop_web_server(self):
+        """Stop the Flask web server"""
+        if not self.web_server_running:
+            return
+        
+        try:
+            self.web_server_running = False
+            # Note: Flask-SocketIO doesn't have a clean shutdown method
+            # The server will stop when the main application exits
+            self.log_message("Web server stopped.")
+        except Exception as e:
+            self.log_message(f"Error stopping web server: {str(e)}")
+    
+    def send_server_command(self, command):
+        """Send command to server (used by web interface)"""
+        if self.server_running and self.server_process:
+            try:
+                self.server_process.stdin.write(command + "\n")
+                self.server_process.stdin.flush()
+                self.log_message(f"[WEB] Command sent: {command}")
+            except Exception as e:
+                self.log_message(f"Error sending command: {str(e)}")
+    
+    def get_player_count(self):
+        """Get current player count (placeholder - would need to parse from server output)"""
+        # This would need to be implemented by parsing server output
+        # For now, return a placeholder
+        return "--"
+    
+    def broadcast_console_output(self, message):
+        """Broadcast console output to web clients"""
+        if self.web_server_running and hasattr(self, 'socketio'):
+            try:
+                self.socketio.emit('console_output', {'message': message})
+            except:
+                pass  # Silently handle errors
 
 def main():
     root = tk.Tk()
