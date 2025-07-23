@@ -1206,6 +1206,9 @@ Created by: Aikar (Empire Minecraft)"""
                     body { font-family: Arial, sans-serif; background: #2c3e50; color: #ecf0f1; margin: 0; padding: 20px; }
                     .container { max-width: 1200px; margin: 0 auto; }
                     .header { text-align: center; margin-bottom: 30px; }
+                    .nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; }
+                    .nav-btn.active { background: #3498db; }
                     .console { background: #1e1e1e; color: #00ff00; padding: 15px; height: 400px; overflow-y: scroll; font-family: monospace; border: 2px solid #34495e; }
                     .input-section { margin-top: 20px; display: flex; gap: 10px; }
                     .mode-btn { padding: 10px 20px; background: #3498db; color: white; border: none; cursor: pointer; }
@@ -1221,6 +1224,10 @@ Created by: Aikar (Empire Minecraft)"""
                 <div class="container">
                     <div class="header">
                         <h1>🎮 Cacasians - Remote Server Control</h1>
+                        <div class="nav">
+                            <a href="/" class="nav-btn active">Console</a>
+                            <a href="/files" class="nav-btn">File Manager</a>
+                        </div>
                         <div class="status">
                             <strong>Server Status:</strong> <span id="server-status">Checking...</span> |
                             <strong>Players Online:</strong> <span id="players-online">--</span>
@@ -1307,9 +1314,339 @@ Created by: Aikar (Empire Minecraft)"""
             </html>
             '''
             
+            # File manager template
+            file_manager_template = '''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Cacasians - File Manager</title>
+                <style>
+                    body { font-family: Arial, sans-serif; background: #2c3e50; color: #ecf0f1; margin: 0; padding: 20px; }
+                    .container { max-width: 1200px; margin: 0 auto; }
+                    .header { text-align: center; margin-bottom: 30px; }
+                    .nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; }
+                    .nav-btn.active { background: #3498db; }
+                    .file-browser { display: flex; gap: 20px; height: 600px; }
+                    .file-list { flex: 1; background: #34495e; border-radius: 5px; overflow: hidden; }
+                    .file-editor { flex: 1; background: #34495e; border-radius: 5px; overflow: hidden; display: none; }
+                    .file-list-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; }
+                    .breadcrumb { background: #2c3e50; padding: 10px 15px; border-bottom: 1px solid #555; font-size: 14px; }
+                    .file-items { height: calc(100% - 100px); overflow-y: auto; }
+                    .file-item { padding: 10px 15px; border-bottom: 1px solid #555; cursor: pointer; display: flex; align-items: center; }
+                    .file-item:hover { background: #3498db; }
+                    .file-icon { margin-right: 10px; width: 20px; }
+                    .file-info { flex: 1; }
+                    .file-size { font-size: 12px; color: #bdc3c7; margin-left: auto; }
+                    .editor-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; display: flex; justify-content: between; align-items: center; }
+                    .editor-content { height: calc(100% - 60px); }
+                    .editor-textarea { width: 100%; height: 100%; background: #1e1e1e; color: #ecf0f1; border: none; padding: 15px; font-family: monospace; resize: none; }
+                    .btn { padding: 8px 16px; background: #3498db; color: white; border: none; cursor: pointer; border-radius: 3px; margin-left: 10px; }
+                    .btn.save { background: #27ae60; }
+                    .btn.close { background: #e74c3c; }
+                    .btn.download { background: #f39c12; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>📁 Cacasians - File Manager</h1>
+                        <div class="nav">
+                            <a href="/" class="nav-btn">Console</a>
+                            <a href="/files" class="nav-btn active">File Manager</a>
+                        </div>
+                    </div>
+                    
+                    <div class="file-browser">
+                        <div class="file-list" id="file-list">
+                            <div class="file-list-header">
+                                <h3>📂 Server Files</h3>
+                            </div>
+                            <div class="breadcrumb" id="breadcrumb">Loading...</div>
+                            <div class="file-items" id="file-items">
+                                Loading files...
+                            </div>
+                        </div>
+                        
+                        <div class="file-editor" id="file-editor">
+                            <div class="editor-header">
+                                <span id="editor-filename">No file selected</span>
+                                <div>
+                                    <button class="btn save" onclick="saveFile()">💾 Save</button>
+                                    <button class="btn download" onclick="downloadFile()">⬇️ Download</button>
+                                    <button class="btn close" onclick="closeEditor()">✖️ Close</button>
+                                </div>
+                            </div>
+                            <div class="editor-content">
+                                <textarea id="editor-textarea" class="editor-textarea" placeholder="Select a file to edit..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <script>
+                    let currentPath = '.';
+                    let currentFile = null;
+                    
+                    function loadFiles(path = '.') {
+                        currentPath = path;
+                        fetch(`/api/files?path=${encodeURIComponent(path)}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.error) {
+                                    alert('Error: ' + data.error);
+                                    return;
+                                }
+                                
+                                // Update breadcrumb
+                                document.getElementById('breadcrumb').textContent = 'Path: ' + (data.current_path === '.' ? 'Root' : data.current_path);
+                                
+                                // Update file list
+                                const fileItems = document.getElementById('file-items');
+                                fileItems.innerHTML = '';
+                                
+                                // Add parent directory link if not in root
+                                if (data.current_path !== '.') {
+                                    const parentItem = document.createElement('div');
+                                    parentItem.className = 'file-item';
+                                    parentItem.innerHTML = '<span class="file-icon">📁</span><span class="file-info">.. (Parent Directory)</span>';
+                                    parentItem.onclick = () => {
+                                        const parentPath = data.current_path.split('/').slice(0, -1).join('/') || '.';
+                                        loadFiles(parentPath);
+                                    };
+                                    fileItems.appendChild(parentItem);
+                                }
+                                
+                                // Add files and directories
+                                data.items.forEach(item => {
+                                    const fileItem = document.createElement('div');
+                                    fileItem.className = 'file-item';
+                                    
+                                    const icon = item.is_directory ? '📁' : '📄';
+                                    const size = item.is_directory ? '' : formatFileSize(item.size);
+                                    
+                                    fileItem.innerHTML = `
+                                        <span class="file-icon">${icon}</span>
+                                        <span class="file-info">${item.name}</span>
+                                        <span class="file-size">${size}</span>
+                                    `;
+                                    
+                                    fileItem.onclick = () => {
+                                        if (item.is_directory) {
+                                            loadFiles(item.path);
+                                        } else {
+                                            openFile(item.path, item.name);
+                                        }
+                                    };
+                                    
+                                    fileItems.appendChild(fileItem);
+                                });
+                            })
+                            .catch(error => {
+                                console.error('Error loading files:', error);
+                                alert('Error loading files: ' + error.message);
+                            });
+                    }
+                    
+                    function openFile(filepath, filename) {
+                        currentFile = filepath;
+                        document.getElementById('editor-filename').textContent = filename;
+                        
+                        fetch(`/api/file/${encodeURIComponent(filepath)}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.error) {
+                                    alert('Error: ' + data.error);
+                                    return;
+                                }
+                                
+                                if (data.is_text) {
+                                    document.getElementById('editor-textarea').value = data.content;
+                                    document.getElementById('file-editor').style.display = 'block';
+                                } else {
+                                    alert('This is a binary file and cannot be edited in the web interface. You can download it instead.');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error loading file:', error);
+                                alert('Error loading file: ' + error.message);
+                            });
+                    }
+                    
+                    function saveFile() {
+                        if (!currentFile) {
+                            alert('No file is currently open');
+                            return;
+                        }
+                        
+                        const content = document.getElementById('editor-textarea').value;
+                        
+                        fetch(`/api/file/${encodeURIComponent(currentFile)}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ content: content })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                alert('Error saving file: ' + data.error);
+                            } else {
+                                alert('File saved successfully!');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error saving file:', error);
+                            alert('Error saving file: ' + error.message);
+                        });
+                    }
+                    
+                    function downloadFile() {
+                        if (!currentFile) {
+                            alert('No file is currently open');
+                            return;
+                        }
+                        
+                        window.open(`/download/${encodeURIComponent(currentFile)}`, '_blank');
+                    }
+                    
+                    function closeEditor() {
+                        document.getElementById('file-editor').style.display = 'none';
+                        currentFile = null;
+                        document.getElementById('editor-filename').textContent = 'No file selected';
+                        document.getElementById('editor-textarea').value = '';
+                    }
+                    
+                    function formatFileSize(bytes) {
+                        if (bytes === 0) return '0 B';
+                        const k = 1024;
+                        const sizes = ['B', 'KB', 'MB', 'GB'];
+                        const i = Math.floor(Math.log(bytes) / Math.log(k));
+                        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                    }
+                    
+                    // Load files on page load
+                    loadFiles();
+                </script>
+            </body>
+            </html>
+            '''
+            
             @self.web_server.route('/')
             def index():
-                return render_template_string(html_template)
+                return html_template
+            
+            @self.web_server.route('/files')
+            def file_manager():
+                return file_manager_template
+            
+            @self.web_server.route('/api/files')
+            def list_files():
+                path = request.args.get('path', '.')
+                try:
+                    # Security: Only allow access to current directory and subdirectories
+                    abs_path = os.path.abspath(path)
+                    current_dir = os.path.abspath('.')
+                    if not abs_path.startswith(current_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    items = []
+                    if os.path.exists(abs_path) and os.path.isdir(abs_path):
+                        for item in sorted(os.listdir(abs_path)):
+                            item_path = os.path.join(abs_path, item)
+                            rel_path = os.path.relpath(item_path, current_dir)
+                            is_dir = os.path.isdir(item_path)
+                            size = 0 if is_dir else os.path.getsize(item_path)
+                            modified = os.path.getmtime(item_path)
+                            
+                            items.append({
+                                'name': item,
+                                'path': rel_path.replace('\\', '/'),
+                                'is_directory': is_dir,
+                                'size': size,
+                                'modified': modified
+                            })
+                    
+                    return jsonify({
+                        'current_path': os.path.relpath(abs_path, current_dir).replace('\\', '/'),
+                        'items': items
+                    })
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/api/file/<path:filepath>')
+            def get_file(filepath):
+                try:
+                    # Security check
+                    abs_path = os.path.abspath(filepath)
+                    current_dir = os.path.abspath('.')
+                    if not abs_path.startswith(current_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    if not os.path.exists(abs_path) or os.path.isdir(abs_path):
+                        return jsonify({'error': 'File not found'}), 404
+                    
+                    # Check if file is text-based
+                    try:
+                        with open(abs_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        return jsonify({
+                            'content': content,
+                            'is_text': True,
+                            'size': len(content)
+                        })
+                    except UnicodeDecodeError:
+                        return jsonify({
+                            'error': 'Binary file - cannot display',
+                            'is_text': False,
+                            'size': os.path.getsize(abs_path)
+                        })
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/api/file/<path:filepath>', methods=['POST'])
+            def save_file(filepath):
+                try:
+                    # Security check
+                    abs_path = os.path.abspath(filepath)
+                    current_dir = os.path.abspath('.')
+                    if not abs_path.startswith(current_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    data = request.get_json()
+                    content = data.get('content', '')
+                    
+                    # Create directory if it doesn't exist
+                    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                    
+                    with open(abs_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    
+                    self.log_message(f"[WEB] File saved: {filepath}")
+                    return jsonify({'success': True})
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/download/<path:filepath>')
+            def download_file(filepath):
+                try:
+                    # Security check
+                    abs_path = os.path.abspath(filepath)
+                    current_dir = os.path.abspath('.')
+                    if not abs_path.startswith(current_dir):
+                        return "Access denied", 403
+                    
+                    if not os.path.exists(abs_path) or os.path.isdir(abs_path):
+                        return "File not found", 404
+                    
+                    return send_from_directory(
+                        os.path.dirname(abs_path),
+                        os.path.basename(abs_path),
+                        as_attachment=True
+                    )
+                except Exception as e:
+                    return str(e), 500
             
             @self.socketio.on('send_command')
             def handle_command(data):
