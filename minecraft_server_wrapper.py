@@ -22,6 +22,14 @@ class MinecraftServerWrapper:
         self.root.geometry("800x600")
         self.root.configure(bg="#2c3e50")
         
+
+        
+        # Set default font to Microsoft Sans Serif
+        self.default_font = ("Microsoft Sans Serif", 10)
+        self.title_font = ("Microsoft Sans Serif", 16, "bold")
+        self.button_font = ("Microsoft Sans Serif", 10, "bold")
+        self.label_font = ("Microsoft Sans Serif", 10)
+        
         # Server process
         self.server_process = None
         self.server_running = False
@@ -107,7 +115,7 @@ class MinecraftServerWrapper:
         
         # Title
         title_label = tk.Label(main_frame, text="Cacasians Minecraft Server Wrapper", 
-                              font=("Arial", 16, "bold"), fg="#ecf0f1", bg="#2c3e50")
+                              font=self.title_font, fg="#ecf0f1", bg="#2c3e50")
         title_label.pack(pady=(0, 20))
         
         # Server controls frame
@@ -115,7 +123,7 @@ class MinecraftServerWrapper:
         controls_frame.pack(fill=tk.X, pady=(0, 10))
         
         controls_title = tk.Label(controls_frame, text="Server Controls", 
-                                 font=("Arial", 12, "bold"), fg="#ecf0f1", bg="#34495e")
+                                 font=("Microsoft Sans Serif", 12, "bold"), fg="#ecf0f1", bg="#34495e")
         controls_title.pack(pady=5)
         
         # Buttons frame
@@ -124,22 +132,22 @@ class MinecraftServerWrapper:
         
         self.start_button = tk.Button(buttons_frame, text="Start Server", 
                                      command=self.start_server, bg="#27ae60", fg="white",
-                                     font=("Arial", 10, "bold"), width=12)
+                                     font=self.button_font, width=12)
         self.start_button.pack(side=tk.LEFT, padx=5)
         
         self.stop_button = tk.Button(buttons_frame, text="Stop Server", 
                                     command=self.stop_server, bg="#e74c3c", fg="white",
-                                    font=("Arial", 10, "bold"), width=12, state=tk.DISABLED)
+                                    font=self.button_font, width=12, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=5)
         
         self.restart_button = tk.Button(buttons_frame, text="Restart Server", 
                                        command=self.restart_server, bg="#f39c12", fg="white",
-                                       font=("Arial", 10, "bold"), width=12, state=tk.DISABLED)
+                                       font=self.button_font, width=12, state=tk.DISABLED)
         self.restart_button.pack(side=tk.LEFT, padx=5)
         
         # Status
         self.status_label = tk.Label(controls_frame, text="Status: Stopped", 
-                                    fg="#e74c3c", bg="#34495e", font=("Arial", 10, "bold"))
+                                    fg="#e74c3c", bg="#34495e", font=self.button_font)
         self.status_label.pack(pady=5)
         
         # Configuration frame
@@ -147,7 +155,7 @@ class MinecraftServerWrapper:
         config_frame.pack(fill=tk.X, pady=(0, 10))
         
         config_title = tk.Label(config_frame, text="Server Configuration", 
-                               font=("Arial", 12, "bold"), fg="#ecf0f1", bg="#34495e")
+                               font=("Microsoft Sans Serif", 12, "bold"), fg="#ecf0f1", bg="#34495e")
         config_title.pack(pady=5)
         
         # Config grid
@@ -155,37 +163,37 @@ class MinecraftServerWrapper:
         config_grid.pack(padx=10, pady=10)
         
         # Server JAR
-        tk.Label(config_grid, text="Server JAR:", fg="#ecf0f1", bg="#34495e").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        tk.Label(config_grid, text="Server JAR:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=0, column=0, sticky="w", padx=5, pady=2)
         jar_frame = tk.Frame(config_grid, bg="#34495e")
         jar_frame.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
         
-        self.jar_entry = tk.Entry(jar_frame, width=40)
+        self.jar_entry = tk.Entry(jar_frame, width=40, font=self.default_font)
         self.jar_entry.pack(side=tk.LEFT, padx=(0, 5))
         self.jar_entry.insert(0, self.config.get("server_jar", ""))
         self.jar_entry.bind('<FocusOut>', self.auto_save_config)
         self.jar_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
-        browse_button = tk.Button(jar_frame, text="Browse", command=self.browse_jar, bg="#3498db", fg="white")
+        browse_button = tk.Button(jar_frame, text="Browse", command=self.browse_jar, bg="#3498db", fg="white", font=self.default_font)
         browse_button.pack(side=tk.LEFT)
         
         # Memory settings
-        tk.Label(config_grid, text="Min Memory:", fg="#ecf0f1", bg="#34495e").grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        self.min_memory_entry = tk.Entry(config_grid, width=10)
+        tk.Label(config_grid, text="Min Memory:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        self.min_memory_entry = tk.Entry(config_grid, width=10, font=self.default_font)
         self.min_memory_entry.grid(row=1, column=1, sticky="w", padx=5, pady=2)
         self.min_memory_entry.insert(0, self.config.get("memory_min", "1G"))
         self.min_memory_entry.bind('<FocusOut>', self.auto_save_config)
         self.min_memory_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
-        tk.Label(config_grid, text="Max Memory:", fg="#ecf0f1", bg="#34495e").grid(row=2, column=0, sticky="w", padx=5, pady=2)
-        self.max_memory_entry = tk.Entry(config_grid, width=10)
+        tk.Label(config_grid, text="Max Memory:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=2, column=0, sticky="w", padx=5, pady=2)
+        self.max_memory_entry = tk.Entry(config_grid, width=10, font=self.default_font)
         self.max_memory_entry.grid(row=2, column=1, sticky="w", padx=5, pady=2)
         self.max_memory_entry.insert(0, self.config.get("memory_max", "2G"))
         self.max_memory_entry.bind('<FocusOut>', self.auto_save_config)
         self.max_memory_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
         # Port
-        tk.Label(config_grid, text="Server Port:", fg="#ecf0f1", bg="#34495e").grid(row=3, column=0, sticky="w", padx=5, pady=2)
-        self.port_entry = tk.Entry(config_grid, width=10)
+        tk.Label(config_grid, text="Server Port:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=3, column=0, sticky="w", padx=5, pady=2)
+        self.port_entry = tk.Entry(config_grid, width=10, font=self.default_font)
         self.port_entry.grid(row=3, column=1, sticky="w", padx=5, pady=2)
         self.port_entry.insert(0, self.config.get("server_port", "25565"))
         self.port_entry.bind('<FocusOut>', self.auto_save_config)
@@ -198,12 +206,12 @@ class MinecraftServerWrapper:
         aikars_checkbox = tk.Checkbutton(config_grid, text="Use Aikar's Flags (Optimized JVM)", 
                                         variable=self.aikars_flags_var, fg="#ecf0f1", bg="#34495e",
                                         selectcolor="#2c3e50", activebackground="#34495e",
-                                        activeforeground="#ecf0f1", font=("Arial", 9))
+                                        activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9))
         aikars_checkbox.grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=5)
         
         # Info button for Aikar's Flags
         info_button = tk.Button(config_grid, text="ℹ️ Info", command=self.show_aikars_info,
-                               bg="#3498db", fg="white", font=("Arial", 8), width=8)
+                               bg="#3498db", fg="white", font=("Microsoft Sans Serif", 8), width=8)
         info_button.grid(row=4, column=1, sticky="e", padx=5, pady=5)
         
         # Auto-start server
@@ -213,14 +221,14 @@ class MinecraftServerWrapper:
         auto_start_checkbox = tk.Checkbutton(config_grid, text="Auto-start server when app opens", 
                                            variable=self.auto_start_var, fg="#ecf0f1", bg="#34495e",
                                            selectcolor="#2c3e50", activebackground="#34495e",
-                                           activeforeground="#ecf0f1", font=("Arial", 9))
+                                           activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9))
         auto_start_checkbox.grid(row=5, column=0, columnspan=2, sticky="w", padx=5, pady=5)
         
         # Windows startup checkbox
         startup_checkbox = tk.Checkbutton(config_grid, text="Start with Windows (Run at startup)", 
                                         variable=self.startup_enabled_var, fg="#ecf0f1", bg="#34495e",
                                         selectcolor="#2c3e50", activebackground="#34495e",
-                                        activeforeground="#ecf0f1", font=("Arial", 9),
+                                        activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9),
                                         command=self.toggle_windows_startup)
         startup_checkbox.grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=5)
         
@@ -228,19 +236,19 @@ class MinecraftServerWrapper:
         remote_access_checkbox = tk.Checkbutton(config_grid, text="Enable Remote Access (Web Interface)", 
                                                variable=self.remote_access_enabled, fg="#ecf0f1", bg="#34495e",
                                                selectcolor="#2c3e50", activebackground="#34495e",
-                                               activeforeground="#ecf0f1", font=("Arial", 9),
+                                               activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9),
                                                command=self.toggle_remote_access)
         remote_access_checkbox.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=5)
         
         # Web port configuration
-        tk.Label(config_grid, text="Web Port:", fg="#ecf0f1", bg="#34495e", font=("Arial", 9)).grid(row=8, column=0, sticky="w", padx=5, pady=5)
-        self.web_port_entry = tk.Entry(config_grid, bg="#34495e", fg="#ecf0f1", font=("Arial", 9), width=10)
+        tk.Label(config_grid, text="Web Port:", fg="#ecf0f1", bg="#34495e", font=("Microsoft Sans Serif", 9)).grid(row=8, column=0, sticky="w", padx=5, pady=5)
+        self.web_port_entry = tk.Entry(config_grid, bg="#34495e", fg="#ecf0f1", font=("Microsoft Sans Serif", 9), width=10)
         self.web_port_entry.insert(0, str(self.config.get("web_port", 5000)))
         self.web_port_entry.grid(row=8, column=1, sticky="w", padx=5, pady=5)
         
         # Save config button
         save_config_button = tk.Button(config_grid, text="Save Config", command=self.save_config_ui,
-                                      bg="#9b59b6", fg="white", font=("Arial", 9, "bold"))
+                                      bg="#9b59b6", fg="white", font=("Microsoft Sans Serif", 9, "bold"))
         save_config_button.grid(row=9, column=0, columnspan=2, pady=10)
         
         # Server properties management
@@ -248,7 +256,7 @@ class MinecraftServerWrapper:
         properties_frame.pack(pady=10)
         
         properties_label = tk.Label(properties_frame, text="Server Properties Management:", 
-                                   fg="#ecf0f1", bg="#34495e", font=("Arial", 10, "bold"))
+                                   fg="#ecf0f1", bg="#34495e", font=("Microsoft Sans Serif", 10, "bold"))
         properties_label.pack(pady=(0, 5))
         
         properties_buttons_frame = tk.Frame(properties_frame, bg="#34495e")
@@ -256,31 +264,31 @@ class MinecraftServerWrapper:
         
         self.open_properties_button = tk.Button(properties_buttons_frame, text="Open server.properties", 
                                                command=self.open_server_properties, bg="#e67e22", fg="white",
-                                               font=("Arial", 9, "bold"), width=18)
+                                               font=("Microsoft Sans Serif", 9, "bold"), width=18)
         self.open_properties_button.pack(side=tk.LEFT, padx=5)
         
         self.edit_properties_button = tk.Button(properties_buttons_frame, text="Edit in Wrapper", 
                                                command=self.edit_server_properties, bg="#16a085", fg="white",
-                                               font=("Arial", 9, "bold"), width=15)
+                                               font=("Microsoft Sans Serif", 9, "bold"), width=15)
         self.edit_properties_button.pack(side=tk.LEFT, padx=5)
         
         self.reload_properties_button = tk.Button(properties_buttons_frame, text="Reload Properties", 
                                                  command=self.reload_server_properties, bg="#8e44ad", fg="white",
-                                                 font=("Arial", 9, "bold"), width=15)
+                                                 font=("Microsoft Sans Serif", 9, "bold"), width=15)
         self.reload_properties_button.pack(side=tk.LEFT, padx=5)
         
-        # Console frame
+        # Console frame with blur effect
         console_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.RAISED, bd=2)
         console_frame.pack(fill=tk.BOTH, expand=True)
         
         console_title = tk.Label(console_frame, text="Server Console", 
-                                font=("Arial", 12, "bold"), fg="#ecf0f1", bg="#34495e")
+                                font=("Microsoft Sans Serif", 12, "bold"), fg="#ecf0f1", bg="#34495e")
         console_title.pack(pady=5)
         
         # Console output (read-only)
         self.console_output = scrolledtext.ScrolledText(console_frame, height=15, 
                                                        bg="#1e1e1e", fg="#00ff00", 
-                                                       font=("Consolas", 9),
+                                                       font=("Microsoft Sans Serif", 9),
                                                        state=tk.DISABLED, wrap=tk.WORD)
         self.console_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
         
@@ -290,17 +298,17 @@ class MinecraftServerWrapper:
         
         # Mode toggle button
         self.mode_button = tk.Button(command_frame, text="CMD", command=self.toggle_input_mode,
-                                    bg="#3498db", fg="white", font=("Arial", 9, "bold"), width=5)
+                                    bg="#3498db", fg="white", font=("Microsoft Sans Serif", 9, "bold"), width=5)
         self.mode_button.pack(side=tk.LEFT, padx=(0, 5))
         
         # Command input label (dynamic based on mode)
         self.command_label = tk.Label(command_frame, text="Command:", 
-                                     font=("Arial", 9, "bold"), fg="#ecf0f1", bg="#34495e")
+                                     font=("Microsoft Sans Serif", 9, "bold"), fg="#ecf0f1", bg="#34495e")
         self.command_label.pack(side=tk.LEFT, padx=(0, 5))
         
         # Command input field
         self.command_entry = tk.Entry(command_frame, bg="#34495e", fg="#ecf0f1", 
-                                     font=("Consolas", 9), insertbackground="#ecf0f1",
+                                     font=("Microsoft Sans Serif", 9), insertbackground="#ecf0f1",
                                      state=tk.NORMAL, relief=tk.SOLID, bd=1)
         self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         self.command_entry.bind("<Return>", self.send_command)
@@ -309,7 +317,7 @@ class MinecraftServerWrapper:
         
         # Send button
         send_button = tk.Button(command_frame, text="Send", command=self.send_command,
-                               bg="#27ae60", fg="white", font=("Arial", 9, "bold"))
+                               bg="#27ae60", fg="white", font=("Microsoft Sans Serif", 9, "bold"))
         send_button.pack(side=tk.RIGHT)
         
         # Performance monitoring frame
@@ -1203,21 +1211,35 @@ Created by: Aikar (Empire Minecraft)"""
                 <title>Cacasians - Remote Server Control</title>
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
                 <style>
-                    body { font-family: Arial, sans-serif; background: #2c3e50; color: #ecf0f1; margin: 0; padding: 20px; }
+                    body { 
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif; 
+                        background: #2c3e50; 
+                        color: #ecf0f1; 
+                        margin: 0; 
+                        padding: 20px; 
+                    }
                     .container { max-width: 1200px; margin: 0 auto; }
                     .header { text-align: center; margin-bottom: 30px; }
                     .nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
-                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; }
+                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .nav-btn.active { background: #3498db; }
-                    .console { background: #1e1e1e; color: #00ff00; padding: 15px; height: 400px; overflow-y: scroll; font-family: monospace; border: 2px solid #34495e; }
+                    .console { 
+                        background: #1e1e1e; 
+                        color: #00ff00; 
+                        padding: 15px; 
+                        height: 400px; 
+                        overflow-y: scroll; 
+                        font-family: 'Microsoft Sans Serif', monospace; 
+                        border: 2px solid #34495e; 
+                    }
                     .input-section { margin-top: 20px; display: flex; gap: 10px; }
-                    .mode-btn { padding: 10px 20px; background: #3498db; color: white; border: none; cursor: pointer; }
+                    .mode-btn { padding: 10px 20px; background: #3498db; color: white; border: none; cursor: pointer; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .mode-btn.chat { background: #e67e22; }
-                    input[type="text"] { flex: 1; padding: 10px; background: #34495e; color: #ecf0f1; border: 1px solid #555; }
-                    .send-btn { padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; }
+                    input[type="text"] { flex: 1; padding: 10px; background: #34495e; color: #ecf0f1; border: 1px solid #555; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                    .send-btn { padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .controls { display: flex; gap: 10px; margin-bottom: 20px; }
-                    .control-btn { padding: 10px 20px; background: #9b59b6; color: white; border: none; cursor: pointer; }
-                    .status { padding: 10px; background: #34495e; margin-bottom: 20px; border-radius: 5px; }
+                    .control-btn { padding: 10px 20px; background: #9b59b6; color: white; border: none; cursor: pointer; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                    .status { padding: 10px; background: #34495e; margin-bottom: 20px; border-radius: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                 </style>
             </head>
             <body>
@@ -1321,31 +1343,144 @@ Created by: Aikar (Empire Minecraft)"""
             <head>
                 <title>Cacasians - File Manager</title>
                 <style>
-                    body { font-family: Arial, sans-serif; background: #2c3e50; color: #ecf0f1; margin: 0; padding: 20px; }
+                    body { 
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif; 
+                        background: #2c3e50; 
+                        color: #ecf0f1; 
+                        margin: 0; 
+                        padding: 20px; 
+                    }
                     .container { max-width: 1200px; margin: 0 auto; }
                     .header { text-align: center; margin-bottom: 30px; }
                     .nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
-                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; }
+                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .nav-btn.active { background: #3498db; }
                     .file-browser { display: flex; gap: 20px; height: 600px; }
                     .file-list { flex: 1; background: #34495e; border-radius: 5px; overflow: hidden; }
                     .file-editor { flex: 1; background: #34495e; border-radius: 5px; overflow: hidden; display: none; }
-                    .file-list-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; }
-                    .breadcrumb { background: #2c3e50; padding: 10px 15px; border-bottom: 1px solid #555; font-size: 14px; }
+                    .file-list-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                    .breadcrumb { background: #2c3e50; padding: 10px 15px; border-bottom: 1px solid #555; font-size: 14px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .file-items { height: calc(100% - 100px); overflow-y: auto; }
-                    .file-item { padding: 10px 15px; border-bottom: 1px solid #555; cursor: pointer; display: flex; align-items: center; }
+                    .file-item { padding: 10px 15px; border-bottom: 1px solid #555; cursor: pointer; display: flex; align-items: center; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .file-item:hover { background: #3498db; }
                     .file-icon { margin-right: 10px; width: 20px; }
                     .file-info { flex: 1; }
                     .file-size { font-size: 12px; color: #bdc3c7; margin-left: auto; }
-                    .editor-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; display: flex; justify-content: between; align-items: center; }
+                    .editor-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; display: flex; justify-content: between; align-items: center; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
                     .editor-content { height: calc(100% - 60px); }
-                    .editor-textarea { width: 100%; height: 100%; background: #1e1e1e; color: #ecf0f1; border: none; padding: 15px; font-family: monospace; resize: none; }
-                    .btn { padding: 8px 16px; background: #3498db; color: white; border: none; cursor: pointer; border-radius: 3px; margin-left: 10px; }
-                    .btn.save { background: #27ae60; }
-                    .btn.close { background: #e74c3c; }
-                    .btn.download { background: #f39c12; }
-                </style>
+                    .editor-textarea { width: 100%; height: 100%; background: #1e1e1e; color: #ecf0f1; border: none; padding: 15px; font-family: 'Microsoft Sans Serif', monospace; resize: none; }
+                    .btn { padding: 8px 16px; background: #3498db; color: white; border: none; cursor: pointer; border-radius: 3px; margin-left: 10px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                    
+                    /* File Upload Styles */
+                    .upload-area {
+                        border: 2px dashed #555;
+                        border-radius: 8px;
+                        padding: 20px;
+                        margin: 20px 0;
+                        text-align: center;
+                        background: #2a2a2a;
+                        transition: all 0.3s ease;
+                        cursor: pointer;
+                    }
+                    .upload-area.dragover {
+                        border-color: #3498db;
+                        background: #1e3a5f;
+                    }
+                    .upload-area:hover {
+                        border-color: #666;
+                        background: #333;
+                    }
+                    .upload-text {
+                        color: #bbb;
+                        font-size: 16px;
+                        margin: 10px 0;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
+                    .upload-input {
+                        display: none;
+                    }
+                    .upload-progress {
+                        width: 100%;
+                        height: 20px;
+                        background: #333;
+                        border-radius: 10px;
+                        margin: 10px 0;
+                        overflow: hidden;
+                        display: none;
+                    }
+                    .upload-progress-bar {
+                        height: 100%;
+                        background: linear-gradient(90deg, #3498db, #2ecc71);
+                        width: 0%;
+                        transition: width 0.3s ease;
+                    }
+                    
+                    /* Server Monitor Styles */
+                    .monitor-dashboard {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                        gap: 20px;
+                        margin: 20px 0;
+                        padding: 20px;
+                        background: #2a2a2a;
+                        border-radius: 8px;
+                    }
+                    .monitor-card {
+                        background: #333;
+                        border-radius: 8px;
+                        padding: 20px;
+                        text-align: center;
+                        border: 1px solid #444;
+                    }
+                    .monitor-title {
+                        color: #bbb;
+                        font-size: 14px;
+                        margin-bottom: 10px;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
+                    .monitor-value {
+                        color: #fff;
+                        font-size: 24px;
+                        font-weight: bold;
+                        margin-bottom: 10px;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
+                    .monitor-bar {
+                        width: 100%;
+                        height: 8px;
+                        background: #444;
+                        border-radius: 4px;
+                        overflow: hidden;
+                        margin-bottom: 5px;
+                    }
+                    .monitor-bar-fill {
+                        height: 100%;
+                        border-radius: 4px;
+                        transition: width 0.5s ease;
+                    }
+                    .monitor-bar-fill.cpu { background: linear-gradient(90deg, #3498db, #e74c3c); }
+                    .monitor-bar-fill.ram { background: linear-gradient(90deg, #2ecc71, #f39c12); }
+                    .monitor-bar-fill.storage { background: linear-gradient(90deg, #9b59b6, #e67e22); }
+                    .monitor-bar-fill.tps { background: linear-gradient(90deg, #1abc9c, #f1c40f); }
+                    .monitor-status {
+                        color: #bbb;
+                        font-size: 12px;
+                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                    }
+                     .btn.save { background: #27ae60; }
+                     .btn.close { background: #e74c3c; }
+                     .btn.download { background: #f39c12; }
+                     .btn.new { background: #9b59b6; }
+                     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+                     .modal-content { background-color: #34495e; margin: 15% auto; padding: 20px; border-radius: 5px; width: 400px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                     .modal-close { background: #e74c3c; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                     .form-group { margin-bottom: 15px; }
+                     .form-group label { display: block; margin-bottom: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                     .form-group input { width: 100%; padding: 8px; background: #2c3e50; color: #ecf0f1; border: 1px solid #555; border-radius: 3px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                 </style>
             </head>
             <body>
                 <div class="container">
@@ -1357,11 +1492,62 @@ Created by: Aikar (Empire Minecraft)"""
                         </div>
                     </div>
                     
+                    <!-- Server Monitor Dashboard -->
+                    <div class="monitor-dashboard" id="monitor-dashboard">
+                        <div class="monitor-card">
+                            <div class="monitor-title">🖥️ CPU Usage</div>
+                            <div class="monitor-value" id="cpu-value">0%</div>
+                            <div class="monitor-bar">
+                                <div class="monitor-bar-fill cpu" id="cpu-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="monitor-status" id="cpu-status">Monitoring...</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">🧠 RAM Usage</div>
+                            <div class="monitor-value" id="ram-value">0%</div>
+                            <div class="monitor-bar">
+                                <div class="monitor-bar-fill ram" id="ram-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="monitor-status" id="ram-status">Monitoring...</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">💾 Storage</div>
+                            <div class="monitor-value" id="storage-value">0%</div>
+                            <div class="monitor-bar">
+                                <div class="monitor-bar-fill storage" id="storage-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="monitor-status" id="storage-status">Monitoring...</div>
+                        </div>
+                        <div class="monitor-card">
+                            <div class="monitor-title">⚡ Server TPS</div>
+                            <div class="monitor-value" id="tps-value">20.0</div>
+                            <div class="monitor-bar">
+                                <div class="monitor-bar-fill tps" id="tps-bar" style="width: 100%"></div>
+                            </div>
+                            <div class="monitor-status" id="tps-status">Optimal</div>
+                        </div>
+                    </div>
+                    
+                    <!-- File Upload Area -->
+                    <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+                        <div class="upload-text">
+                            📁 Drag & Drop files here or click to browse
+                        </div>
+                        <div class="upload-text" style="font-size: 14px; color: #888;">
+                            Supports all file types
+                        </div>
+                        <input type="file" id="file-input" class="upload-input" multiple>
+                        <div class="upload-progress" id="upload-progress">
+                            <div class="upload-progress-bar" id="upload-progress-bar"></div>
+                        </div>
+                    </div>
+                    
                     <div class="file-browser">
                         <div class="file-list" id="file-list">
-                            <div class="file-list-header">
-                                <h3>📂 Server Files</h3>
-                            </div>
+                             <div class="file-list-header">
+                                 <h3>📂 Server Files</h3>
+                                 <button class="btn new" onclick="showNewFileModal()">📄 New File</button>
+                             </div>
                             <div class="breadcrumb" id="breadcrumb">Loading...</div>
                             <div class="file-items" id="file-items">
                                 Loading files...
@@ -1380,8 +1566,26 @@ Created by: Aikar (Empire Minecraft)"""
                             <div class="editor-content">
                                 <textarea id="editor-textarea" class="editor-textarea" placeholder="Select a file to edit..."></textarea>
                             </div>
-                        </div>
-                    </div>
+                     </div>
+                     
+                     <!-- New File Modal -->
+                     <div id="newFileModal" class="modal">
+                         <div class="modal-content">
+                             <div class="modal-header">
+                                 <h3>📄 Create New File</h3>
+                                 <button class="modal-close" onclick="hideNewFileModal()">✖️</button>
+                             </div>
+                             <div class="form-group">
+                                 <label for="newFileName">File Name:</label>
+                                 <input type="text" id="newFileName" placeholder="example.txt" onkeypress="handleNewFileKeyPress(event)">
+                             </div>
+                             <div style="text-align: right;">
+                                 <button class="btn" onclick="hideNewFileModal()">Cancel</button>
+                                 <button class="btn save" onclick="createNewFile()">Create File</button>
+                             </div>
+                         </div>
+                     </div>
+                 </div>
                 </div>
                 
                 <script>
@@ -1519,15 +1723,186 @@ Created by: Aikar (Empire Minecraft)"""
                     }
                     
                     function formatFileSize(bytes) {
-                        if (bytes === 0) return '0 B';
-                        const k = 1024;
-                        const sizes = ['B', 'KB', 'MB', 'GB'];
-                        const i = Math.floor(Math.log(bytes) / Math.log(k));
-                        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-                    }
-                    
-                    // Load files on page load
-                    loadFiles();
+                         if (bytes === 0) return '0 B';
+                         const k = 1024;
+                         const sizes = ['B', 'KB', 'MB', 'GB'];
+                         const i = Math.floor(Math.log(bytes) / Math.log(k));
+                         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                     }
+                     
+                     function showNewFileModal() {
+                         document.getElementById('newFileModal').style.display = 'block';
+                         document.getElementById('newFileName').focus();
+                     }
+                     
+                     function hideNewFileModal() {
+                         document.getElementById('newFileModal').style.display = 'none';
+                         document.getElementById('newFileName').value = '';
+                     }
+                     
+                     function handleNewFileKeyPress(event) {
+                         if (event.key === 'Enter') {
+                             createNewFile();
+                         }
+                     }
+                     
+                     function createNewFile() {
+                         const fileName = document.getElementById('newFileName').value.trim();
+                         if (!fileName) {
+                             alert('Please enter a file name');
+                             return;
+                         }
+                         
+                         // Construct the full path
+                         const fullPath = currentPath === '.' ? fileName : currentPath + '/' + fileName;
+                         
+                         // Create empty file
+                         fetch(`/api/file/${encodeURIComponent(fullPath)}`, {
+                             method: 'POST',
+                             headers: {
+                                 'Content-Type': 'application/json',
+                             },
+                             body: JSON.stringify({ content: '' })
+                         })
+                         .then(response => response.json())
+                         .then(data => {
+                             if (data.error) {
+                                 alert('Error creating file: ' + data.error);
+                             } else {
+                                 alert('File created successfully!');
+                                 hideNewFileModal();
+                                 loadFiles(currentPath); // Refresh file list
+                                 // Automatically open the new file for editing
+                                 setTimeout(() => openFile(fullPath, fileName), 500);
+                             }
+                         })
+                         .catch(error => {
+                             console.error('Error creating file:', error);
+                             alert('Error creating file: ' + error.message);
+                         });
+                     }
+                     
+                     // Close modal when clicking outside of it
+                     window.onclick = function(event) {
+                         const modal = document.getElementById('newFileModal');
+                         if (event.target === modal) {
+                             hideNewFileModal();
+                         }
+                     }
+                     
+                     // Load files on page load
+                     loadFiles();
+                     
+                     // File Upload Functionality
+                     const uploadArea = document.getElementById('upload-area');
+                     const fileInput = document.getElementById('file-input');
+                     const uploadProgress = document.getElementById('upload-progress');
+                     const uploadProgressBar = document.getElementById('upload-progress-bar');
+                     
+                     // Drag and drop events
+                     uploadArea.addEventListener('dragover', (e) => {
+                         e.preventDefault();
+                         uploadArea.classList.add('dragover');
+                     });
+                     
+                     uploadArea.addEventListener('dragleave', (e) => {
+                         e.preventDefault();
+                         uploadArea.classList.remove('dragover');
+                     });
+                     
+                     uploadArea.addEventListener('drop', (e) => {
+                         e.preventDefault();
+                         uploadArea.classList.remove('dragover');
+                         const files = e.dataTransfer.files;
+                         uploadFiles(files);
+                     });
+                     
+                     // File input change event
+                     fileInput.addEventListener('change', (e) => {
+                         uploadFiles(e.target.files);
+                     });
+                     
+                     function uploadFiles(files) {
+                         if (files.length === 0) return;
+                         
+                         uploadProgress.style.display = 'block';
+                         uploadProgressBar.style.width = '0%';
+                         
+                         const formData = new FormData();
+                         for (let file of files) {
+                             formData.append('files', file);
+                         }
+                         formData.append('path', currentPath);
+                         
+                         const xhr = new XMLHttpRequest();
+                         
+                         xhr.upload.addEventListener('progress', (e) => {
+                             if (e.lengthComputable) {
+                                 const percentComplete = (e.loaded / e.total) * 100;
+                                 uploadProgressBar.style.width = percentComplete + '%';
+                             }
+                         });
+                         
+                         xhr.addEventListener('load', () => {
+                             uploadProgress.style.display = 'none';
+                             if (xhr.status === 200) {
+                                 const response = JSON.parse(xhr.responseText);
+                                 if (response.error) {
+                                     alert('Upload error: ' + response.error);
+                                 } else {
+                                     alert(`Successfully uploaded ${response.uploaded} file(s)!`);
+                                     loadFiles(currentPath); // Refresh file list
+                                 }
+                             } else {
+                                 alert('Upload failed: ' + xhr.statusText);
+                             }
+                             fileInput.value = ''; // Reset file input
+                         });
+                         
+                         xhr.addEventListener('error', () => {
+                             uploadProgress.style.display = 'none';
+                             alert('Upload failed: Network error');
+                             fileInput.value = '';
+                         });
+                         
+                         xhr.open('POST', '/api/upload');
+                         xhr.send(formData);
+                     }
+                     
+                     // Server Monitoring
+                     function updateServerMonitor() {
+                         fetch('/api/monitor')
+                             .then(response => response.json())
+                             .then(data => {
+                                 // Update CPU
+                                 document.getElementById('cpu-value').textContent = data.cpu.toFixed(1) + '%';
+                                 document.getElementById('cpu-bar').style.width = data.cpu + '%';
+                                 document.getElementById('cpu-status').textContent = data.cpu > 80 ? 'High' : data.cpu > 50 ? 'Medium' : 'Low';
+                                 
+                                 // Update RAM
+                                 document.getElementById('ram-value').textContent = data.ram.toFixed(1) + '%';
+                                 document.getElementById('ram-bar').style.width = data.ram + '%';
+                                 document.getElementById('ram-status').textContent = `${data.ram_used}GB / ${data.ram_total}GB`;
+                                 
+                                 // Update Storage
+                                 document.getElementById('storage-value').textContent = data.storage.toFixed(1) + '%';
+                                 document.getElementById('storage-bar').style.width = data.storage + '%';
+                                 document.getElementById('storage-status').textContent = `${data.storage_used}GB / ${data.storage_total}GB`;
+                                 
+                                 // Update TPS
+                                 document.getElementById('tps-value').textContent = data.tps.toFixed(1);
+                                 const tpsPercent = (data.tps / 20) * 100;
+                                 document.getElementById('tps-bar').style.width = Math.min(tpsPercent, 100) + '%';
+                                 document.getElementById('tps-status').textContent = data.tps >= 19 ? 'Optimal' : data.tps >= 15 ? 'Good' : data.tps >= 10 ? 'Poor' : 'Critical';
+                             })
+                             .catch(error => {
+                                 console.error('Error fetching monitor data:', error);
+                             });
+                     }
+                     
+                     // Update monitor every 2 seconds
+                     setInterval(updateServerMonitor, 2000);
+                     updateServerMonitor(); // Initial update
                 </script>
             </body>
             </html>
@@ -1660,6 +2035,108 @@ Created by: Aikar (Empire Minecraft)"""
                     )
                 except Exception as e:
                     return str(e), 500
+            
+            @self.web_server.route('/api/upload', methods=['POST'])
+            def upload_files():
+                try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    upload_path = request.form.get('path', '.')
+                    
+                    # Handle relative paths from the server directory
+                    if upload_path == '.':
+                        abs_upload_path = server_base_dir
+                    else:
+                        abs_upload_path = os.path.abspath(os.path.join(server_base_dir, upload_path))
+                    
+                    # Security check
+                    if not abs_upload_path.startswith(server_base_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    # Create directory if it doesn't exist
+                    os.makedirs(abs_upload_path, exist_ok=True)
+                    
+                    uploaded_files = request.files.getlist('files')
+                    uploaded_count = 0
+                    
+                    for file in uploaded_files:
+                        if file.filename:
+                            # Secure filename
+                            filename = file.filename.replace('..', '').replace('/', '').replace('\\', '')
+                            if filename:
+                                file_path = os.path.join(abs_upload_path, filename)
+                                file.save(file_path)
+                                uploaded_count += 1
+                                self.log_message(f"[WEB] File uploaded: {filename}")
+                    
+                    return jsonify({
+                        'success': True,
+                        'uploaded': uploaded_count,
+                        'message': f'Successfully uploaded {uploaded_count} file(s)'
+                    })
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/api/monitor')
+            def get_monitor_data():
+                try:
+                    import psutil
+                    import shutil
+                    
+                    # Get CPU usage
+                    cpu_percent = psutil.cpu_percent(interval=0.1)
+                    
+                    # Get RAM usage
+                    memory = psutil.virtual_memory()
+                    ram_percent = memory.percent
+                    ram_used = round(memory.used / (1024**3), 1)  # GB
+                    ram_total = round(memory.total / (1024**3), 1)  # GB
+                    
+                    # Get storage usage for server directory
+                    server_dir = 'C:/Users/MersYeon/Desktop/Cacasians/'
+                    if os.path.exists(server_dir):
+                        total, used, free = shutil.disk_usage(server_dir)
+                        storage_percent = (used / total) * 100
+                        storage_used = round(used / (1024**3), 1)  # GB
+                        storage_total = round(total / (1024**3), 1)  # GB
+                    else:
+                        storage_percent = 0
+                        storage_used = 0
+                        storage_total = 0
+                    
+                    # Get TPS (placeholder - would need to parse from server output)
+                    # For now, simulate TPS based on CPU usage
+                    if cpu_percent < 30:
+                        tps = 20.0
+                    elif cpu_percent < 60:
+                        tps = 19.5 - (cpu_percent - 30) * 0.5 / 30
+                    elif cpu_percent < 80:
+                        tps = 19.0 - (cpu_percent - 60) * 4 / 20
+                    else:
+                        tps = max(15.0 - (cpu_percent - 80) * 10 / 20, 5.0)
+                    
+                    return jsonify({
+                        'cpu': cpu_percent,
+                        'ram': ram_percent,
+                        'ram_used': ram_used,
+                        'ram_total': ram_total,
+                        'storage': storage_percent,
+                        'storage_used': storage_used,
+                        'storage_total': storage_total,
+                        'tps': tps
+                    })
+                except Exception as e:
+                    return jsonify({
+                        'cpu': 0,
+                        'ram': 0,
+                        'ram_used': 0,
+                        'ram_total': 0,
+                        'storage': 0,
+                        'storage_used': 0,
+                        'storage_total': 0,
+                        'tps': 20.0,
+                        'error': str(e)
+                    })
             
             @self.socketio.on('send_command')
             def handle_command(data):
