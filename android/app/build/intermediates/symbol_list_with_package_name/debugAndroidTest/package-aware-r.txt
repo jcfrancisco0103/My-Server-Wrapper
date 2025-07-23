@@ -1,3 +1,0 @@
-com.cacasians.servermanager.test
-style WhiteBackgroundDialogTheme
-style WhiteBackgroundTheme

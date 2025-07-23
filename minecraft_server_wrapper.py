@@ -10,7 +10,13 @@ import webbrowser
 import sys
 import psutil
 import re
-import winreg
+# Windows-specific imports (conditional)
+try:
+    import winreg
+    WINDOWS_PLATFORM = True
+except ImportError:
+    WINDOWS_PLATFORM = False
+    winreg = None
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit
 from werkzeug.serving import make_server
@@ -201,6 +207,12 @@ class MinecraftServerWrapper:
                                        font=self.button_font, width=14, height=2, state=tk.DISABLED,
                                        relief=tk.FLAT, bd=0, cursor="hand2")
         self.restart_button.pack(side=tk.LEFT, padx=8)
+        
+        self.kill_button = tk.Button(buttons_frame, text="💀 Kill Server", 
+                                    command=self.kill_server, bg="#8e44ad", fg="white",
+                                    font=self.button_font, width=14, height=2, state=tk.DISABLED,
+                                    relief=tk.FLAT, bd=0, cursor="hand2")
+        self.kill_button.pack(side=tk.LEFT, padx=8)
         
         # Status with better styling
         self.status_label = tk.Label(controls_frame, text="Status: Stopped", 
@@ -552,6 +564,32 @@ class MinecraftServerWrapper:
         time.sleep(2)  # Wait a moment
         self.start_server()
     
+    def kill_server(self):
+        """Forcefully kill the Minecraft server process"""
+        if not self.server_running or not self.server_process:
+            self.log_message("No server process to kill.")
+            return
+        
+        try:
+            # Force kill the process
+            self.server_process.kill()
+            self.log_message("Server process forcefully terminated.")
+            
+            # Wait for process to end
+            self.server_process.wait(timeout=5)
+            
+        except subprocess.TimeoutExpired:
+            self.log_message("Server process killed but cleanup timed out.")
+        except Exception as e:
+            self.log_message(f"Error killing server: {str(e)}")
+        
+        self.server_running = False
+        self.server_process = None
+        self.server_start_time = None
+        self.monitoring_active = False
+        self.update_ui_state()
+        self.log_message("Server killed successfully.")
+    
     def send_command(self, event=None):
         """Send command to server or as chat message based on current mode"""
         command = self.command_entry.get().strip()
@@ -636,12 +674,30 @@ class MinecraftServerWrapper:
             self.start_button.config(state=tk.DISABLED)
             self.stop_button.config(state=tk.NORMAL)
             self.restart_button.config(state=tk.NORMAL)
+            self.kill_button.config(state=tk.NORMAL)
             self.status_label.config(text="Status: Running", fg="#27ae60")
         else:
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
             self.restart_button.config(state=tk.DISABLED)
+            self.kill_button.config(state=tk.DISABLED)
             self.status_label.config(text="Status: Stopped", fg="#e74c3c")
+        
+        # Emit status update to web clients
+        if hasattr(self, 'socketio') and self.web_server_running:
+            try:
+                self.socketio.emit('status_update', {
+                    'running': self.server_running,
+                    'uptime': self.get_uptime() if self.server_running else 0
+                })
+            except:
+                pass  # Silently handle errors
+    
+    def get_uptime(self):
+        """Get server uptime in seconds"""
+        if self.server_running and self.server_start_time:
+            return int(time.time() - self.server_start_time)
+        return 0
     
     def get_server_directory(self):
         """Get the directory where the server JAR is located"""
@@ -1174,6 +1230,11 @@ Created by: Aikar (Empire Minecraft)"""
     
     def toggle_windows_startup(self):
         """Toggle Windows startup registry entry"""
+        if not WINDOWS_PLATFORM:
+            self.log_message("Windows startup feature is only available on Windows systems.")
+            self.startup_enabled_var.set(False)
+            return
+            
         try:
             if self.startup_enabled_var.get():
                 self.add_to_startup()
@@ -1192,6 +1253,9 @@ Created by: Aikar (Empire Minecraft)"""
     
     def add_to_startup(self):
         """Add application to Windows startup"""
+        if not WINDOWS_PLATFORM:
+            raise Exception("Windows startup feature is only available on Windows systems.")
+            
         try:
             # Get the path to the current script
             if getattr(sys, 'frozen', False):
@@ -1215,6 +1279,9 @@ Created by: Aikar (Empire Minecraft)"""
     
     def remove_from_startup(self):
         """Remove application from Windows startup"""
+        if not WINDOWS_PLATFORM:
+            raise Exception("Windows startup feature is only available on Windows systems.")
+            
         try:
             # Open the registry key for startup programs
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
@@ -1235,6 +1302,9 @@ Created by: Aikar (Empire Minecraft)"""
     
     def check_startup_status(self):
         """Check if application is currently in Windows startup"""
+        if not WINDOWS_PLATFORM:
+            return False
+            
         try:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
                                 r"Software\Microsoft\Windows\CurrentVersion\Run", 
@@ -1717,9 +1787,10 @@ Created by: Aikar (Empire Minecraft)"""
                     </div>
                     
                     <div class="controls">
-                        <button class="control-btn" onclick="startServer()">🚀 Start Server</button>
-                        <button class="control-btn" onclick="stopServer()">🛑 Stop Server</button>
-                        <button class="control-btn" onclick="restartServer()">🔄 Restart Server</button>
+                        <button class="control-btn" id="start-btn" onclick="startServer()">🚀 Start Server</button>
+                        <button class="control-btn" id="stop-btn" onclick="stopServer()">🛑 Stop Server</button>
+                        <button class="control-btn" id="restart-btn" onclick="restartServer()">🔄 Restart Server</button>
+                        <button class="control-btn" id="kill-btn" onclick="killServer()" style="background: linear-gradient(45deg, #8e44ad, #9b59b6);">💀 Kill Server</button>
                     </div>
                     
                     <!-- Server Monitor Dashboard -->
@@ -1887,6 +1958,11 @@ Created by: Aikar (Empire Minecraft)"""
                         addConsoleMessage(data.message, messageType);
                     });
                     
+                    socket.on('status_update', function(data) {
+                        // Update button states when server status changes
+                        updateButtonStates(data.running);
+                    });
+                    
                     // Load console history when page loads
                     document.addEventListener('DOMContentLoaded', function() {
                         loadConsoleHistory();
@@ -1896,6 +1972,9 @@ Created by: Aikar (Empire Minecraft)"""
                     socket.on('server_status', function(data) {
                         document.getElementById('server-status').textContent = data.running ? 'Running' : 'Stopped';
                         document.getElementById('players-online').textContent = data.players || '--';
+                        
+                        // Update button states based on server status
+                        updateButtonStates(data.running);
                         
                         // Update monitor dashboard
                         updateMonitorDashboard(data);
@@ -2009,6 +2088,54 @@ Created by: Aikar (Empire Minecraft)"""
                     function restartServer() {
                         socket.emit('server_control', {action: 'restart'});
                         animateButton(event.target);
+                    }
+                    
+                    function killServer() {
+                        if (confirm('Are you sure you want to forcefully kill the server? This may cause data loss.')) {
+                            socket.emit('server_control', {action: 'kill'});
+                            animateButton(event.target);
+                        }
+                    }
+                    
+                    function updateButtonStates(serverRunning) {
+                        const startBtn = document.getElementById('start-btn');
+                        const stopBtn = document.getElementById('stop-btn');
+                        const restartBtn = document.getElementById('restart-btn');
+                        const killBtn = document.getElementById('kill-btn');
+                        
+                        if (serverRunning) {
+                            startBtn.disabled = true;
+                            startBtn.style.opacity = '0.5';
+                            startBtn.style.cursor = 'not-allowed';
+                            
+                            stopBtn.disabled = false;
+                            stopBtn.style.opacity = '1';
+                            stopBtn.style.cursor = 'pointer';
+                            
+                            restartBtn.disabled = false;
+                            restartBtn.style.opacity = '1';
+                            restartBtn.style.cursor = 'pointer';
+                            
+                            killBtn.disabled = false;
+                            killBtn.style.opacity = '1';
+                            killBtn.style.cursor = 'pointer';
+                        } else {
+                            startBtn.disabled = false;
+                            startBtn.style.opacity = '1';
+                            startBtn.style.cursor = 'pointer';
+                            
+                            stopBtn.disabled = true;
+                            stopBtn.style.opacity = '0.5';
+                            stopBtn.style.cursor = 'not-allowed';
+                            
+                            restartBtn.disabled = true;
+                            restartBtn.style.opacity = '0.5';
+                            restartBtn.style.cursor = 'not-allowed';
+                            
+                            killBtn.disabled = true;
+                            killBtn.style.opacity = '0.5';
+                            killBtn.style.cursor = 'not-allowed';
+                        }
                     }
                     
                     function animateButton(button) {
@@ -2193,6 +2320,85 @@ Created by: Aikar (Empire Minecraft)"""
                         display: flex;
                         justify-content: space-between;
                         align-items: center;
+                    }
+                    
+                    .file-actions {
+                        display: flex;
+                        align-items: center;
+                        gap: 15px;
+                    }
+                    
+                    /* Checkbox Styles */
+                    .checkbox-container {
+                        display: flex;
+                        align-items: center;
+                        cursor: pointer;
+                        font-size: 14px;
+                        color: #ecf0f1;
+                        user-select: none;
+                    }
+                    
+                    .checkbox-container input[type="checkbox"] {
+                        display: none;
+                    }
+                    
+                    .checkmark {
+                        width: 18px;
+                        height: 18px;
+                        background: rgba(52, 73, 94, 0.8);
+                        border: 2px solid rgba(255, 255, 255, 0.3);
+                        border-radius: 4px;
+                        margin-right: 8px;
+                        position: relative;
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .checkbox-container input[type="checkbox"]:checked + .checkmark {
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        border-color: #3498db;
+                    }
+                    
+                    .checkbox-container input[type="checkbox"]:checked + .checkmark::after {
+                        content: '✓';
+                        position: absolute;
+                        top: -2px;
+                        left: 2px;
+                        color: white;
+                        font-size: 14px;
+                        font-weight: bold;
+                    }
+                    
+                    .file-checkbox {
+                        margin-right: 10px;
+                    }
+                    
+                    /* Button Variants */
+                    .btn.delete {
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                    }
+                    
+                    .btn.delete:hover {
+                        box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
+                    }
+                    
+                    .btn.rename {
+                        background: linear-gradient(45deg, #f39c12, #e67e22);
+                    }
+                    
+                    .btn.rename:hover {
+                        box-shadow: 0 8px 25px rgba(243, 156, 18, 0.4);
+                    }
+                    
+                    .btn:disabled {
+                        background: rgba(127, 140, 141, 0.5);
+                        cursor: not-allowed;
+                        transform: none;
+                        box-shadow: none;
+                    }
+                    
+                    .btn:disabled:hover {
+                        transform: none;
+                        box-shadow: none;
                     }
                     
                     .breadcrumb { 
@@ -2741,7 +2947,16 @@ Created by: Aikar (Empire Minecraft)"""
                         <div class="file-list" id="file-list">
                              <div class="file-list-header">
                                  <h3>📂 Server Files</h3>
-                                 <button class="btn new" onclick="showNewFileModal()">📄 New File</button>
+                                 <div class="file-actions">
+                                     <label class="checkbox-container">
+                                         <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+                                         <span class="checkmark"></span>
+                                         Select All
+                                     </label>
+                                     <button class="btn new" onclick="showNewFileModal()">📄 New File</button>
+                                     <button class="btn delete" id="delete-btn" onclick="deleteSelected()" disabled>🗑️ Delete</button>
+                                     <button class="btn rename" id="rename-btn" onclick="renameSelected()" disabled>✏️ Rename</button>
+                                 </div>
                              </div>
                             <div class="breadcrumb" id="breadcrumb">Loading...</div>
                             <div class="file-items" id="file-items">
@@ -2829,17 +3044,27 @@ Created by: Aikar (Empire Minecraft)"""
                                 sortedItems.forEach(item => {
                                     const fileItem = document.createElement('div');
                                     fileItem.className = 'file-item';
+                                    fileItem.dataset.path = item.path;
+                                    fileItem.dataset.name = item.name;
+                                    fileItem.dataset.isDirectory = item.is_directory;
                                     
                                     const icon = item.is_directory ? '📁' : '📄';
                                     const size = item.is_directory ? '' : formatFileSize(item.size);
                                     
                                     fileItem.innerHTML = `
+                                        <label class="checkbox-container file-checkbox" onclick="event.stopPropagation()">
+                                            <input type="checkbox" class="file-select" onchange="updateActionButtons()">
+                                            <span class="checkmark"></span>
+                                        </label>
                                         <span class="file-icon">${icon}</span>
                                         <span class="file-info">${item.name}</span>
                                         <span class="file-size">${size}</span>
                                     `;
                                     
-                                    fileItem.onclick = () => {
+                                    fileItem.onclick = (e) => {
+                                        // Don't trigger if clicking on checkbox
+                                        if (e.target.closest('.file-checkbox')) return;
+                                        
                                         if (item.is_directory) {
                                             loadFiles(item.path);
                                         } else {
@@ -3107,6 +3332,139 @@ Created by: Aikar (Empire Minecraft)"""
                      // Update monitor every 2 seconds
                      setInterval(updateServerMonitor, 2000);
                      updateServerMonitor(); // Initial update
+                     
+                     // File Selection and Operations
+                     function toggleSelectAll() {
+                         const selectAllCheckbox = document.getElementById('select-all');
+                         const fileCheckboxes = document.querySelectorAll('.file-select');
+                         
+                         fileCheckboxes.forEach(checkbox => {
+                             checkbox.checked = selectAllCheckbox.checked;
+                         });
+                         
+                         updateActionButtons();
+                     }
+                     
+                     function updateActionButtons() {
+                         const selectedFiles = getSelectedFiles();
+                         const deleteBtn = document.getElementById('delete-btn');
+                         const renameBtn = document.getElementById('rename-btn');
+                         
+                         deleteBtn.disabled = selectedFiles.length === 0;
+                         renameBtn.disabled = selectedFiles.length !== 1; // Only allow rename for single file
+                         
+                         // Update select all checkbox state
+                         const selectAllCheckbox = document.getElementById('select-all');
+                         const fileCheckboxes = document.querySelectorAll('.file-select');
+                         const checkedCount = document.querySelectorAll('.file-select:checked').length;
+                         
+                         if (checkedCount === 0) {
+                             selectAllCheckbox.indeterminate = false;
+                             selectAllCheckbox.checked = false;
+                         } else if (checkedCount === fileCheckboxes.length) {
+                             selectAllCheckbox.indeterminate = false;
+                             selectAllCheckbox.checked = true;
+                         } else {
+                             selectAllCheckbox.indeterminate = true;
+                         }
+                     }
+                     
+                     function getSelectedFiles() {
+                         const selectedFiles = [];
+                         const checkedBoxes = document.querySelectorAll('.file-select:checked');
+                         
+                         checkedBoxes.forEach(checkbox => {
+                             const fileItem = checkbox.closest('.file-item');
+                             selectedFiles.push({
+                                 path: fileItem.dataset.path,
+                                 name: fileItem.dataset.name,
+                                 isDirectory: fileItem.dataset.isDirectory === 'true'
+                             });
+                         });
+                         
+                         return selectedFiles;
+                     }
+                     
+                     function deleteSelected() {
+                         const selectedFiles = getSelectedFiles();
+                         if (selectedFiles.length === 0) return;
+                         
+                         const fileNames = selectedFiles.map(f => f.name).join(', ');
+                         const confirmMessage = `Are you sure you want to delete ${selectedFiles.length} item(s)?\n\n${fileNames}`;
+                         
+                         if (!confirm(confirmMessage)) return;
+                         
+                         // Delete files one by one
+                         let deletedCount = 0;
+                         let errors = [];
+                         
+                         selectedFiles.forEach((file, index) => {
+                             fetch(`/api/file/${encodeURIComponent(file.path)}`, {
+                                 method: 'DELETE'
+                             })
+                             .then(response => response.json())
+                             .then(data => {
+                                 if (data.error) {
+                                     errors.push(`${file.name}: ${data.error}`);
+                                 } else {
+                                     deletedCount++;
+                                 }
+                                 
+                                 // Check if this is the last file
+                                 if (index === selectedFiles.length - 1) {
+                                     if (errors.length > 0) {
+                                         alert(`Deleted ${deletedCount} file(s). Errors:\n${errors.join('\n')}`);
+                                     } else {
+                                         alert(`Successfully deleted ${deletedCount} file(s)!`);
+                                     }
+                                     loadFiles(currentPath); // Refresh file list
+                                 }
+                             })
+                             .catch(error => {
+                                 errors.push(`${file.name}: ${error.message}`);
+                                 if (index === selectedFiles.length - 1) {
+                                     alert(`Deleted ${deletedCount} file(s). Errors:\n${errors.join('\n')}`);
+                                     loadFiles(currentPath);
+                                 }
+                             });
+                         });
+                     }
+                     
+                     function renameSelected() {
+                         const selectedFiles = getSelectedFiles();
+                         if (selectedFiles.length !== 1) return;
+                         
+                         const file = selectedFiles[0];
+                         const newName = prompt(`Rename "${file.name}" to:`, file.name);
+                         
+                         if (!newName || newName === file.name) return;
+                         
+                         // Construct new path
+                         const pathParts = file.path.split('/');
+                         pathParts[pathParts.length - 1] = newName;
+                         const newPath = pathParts.join('/');
+                         
+                         fetch(`/api/file/${encodeURIComponent(file.path)}/rename`, {
+                             method: 'POST',
+                             headers: {
+                                 'Content-Type': 'application/json',
+                             },
+                             body: JSON.stringify({ new_name: newName, new_path: newPath })
+                         })
+                         .then(response => response.json())
+                         .then(data => {
+                             if (data.error) {
+                                 alert('Error renaming file: ' + data.error);
+                             } else {
+                                 alert('File renamed successfully!');
+                                 loadFiles(currentPath); // Refresh file list
+                             }
+                         })
+                         .catch(error => {
+                             console.error('Error renaming file:', error);
+                             alert('Error renaming file: ' + error.message);
+                         });
+                     }
                 </script>
             </body>
             </html>
@@ -3239,6 +3597,78 @@ Created by: Aikar (Empire Minecraft)"""
                     )
                 except Exception as e:
                     return str(e), 500
+            
+            @self.web_server.route('/api/file/<path:filepath>', methods=['DELETE'])
+            def delete_file(filepath):
+                try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    
+                    # Security check
+                    if not abs_path.startswith(server_base_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    if not os.path.exists(abs_path):
+                        return jsonify({'error': 'File not found'}), 404
+                    
+                    # Delete file or directory
+                    if os.path.isdir(abs_path):
+                        import shutil
+                        shutil.rmtree(abs_path)
+                        self.log_message(f"[WEB] Directory deleted: {filepath}")
+                    else:
+                        os.remove(abs_path)
+                        self.log_message(f"[WEB] File deleted: {filepath}")
+                    
+                    return jsonify({'success': True})
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/api/file/<path:filepath>/rename', methods=['POST'])
+            def rename_file(filepath):
+                try:
+                    # Set the server directory as the base path
+                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
+                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    
+                    # Security check
+                    if not abs_path.startswith(server_base_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    if not os.path.exists(abs_path):
+                        return jsonify({'error': 'File not found'}), 404
+                    
+                    data = request.get_json()
+                    new_name = data.get('new_name', '')
+                    
+                    if not new_name:
+                        return jsonify({'error': 'New name is required'}), 400
+                    
+                    # Construct new path
+                    parent_dir = os.path.dirname(abs_path)
+                    new_abs_path = os.path.join(parent_dir, new_name)
+                    
+                    # Security check for new path
+                    if not new_abs_path.startswith(server_base_dir):
+                        return jsonify({'error': 'Access denied'}), 403
+                    
+                    # Check if new name already exists
+                    if os.path.exists(new_abs_path):
+                        return jsonify({'error': 'A file with that name already exists'}), 400
+                    
+                    # Rename the file/directory
+                    os.rename(abs_path, new_abs_path)
+                    
+                    new_rel_path = os.path.relpath(new_abs_path, server_base_dir).replace('\\', '/')
+                    self.log_message(f"[WEB] Renamed: {filepath} -> {new_rel_path}")
+                    
+                    return jsonify({
+                        'success': True,
+                        'new_path': new_rel_path
+                    })
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
             
             @self.web_server.route('/api/upload', methods=['POST'])
             def upload_files():
@@ -3373,6 +3803,8 @@ Created by: Aikar (Empire Minecraft)"""
                     self.stop_server()
                 elif action == 'restart':
                     self.restart_server()
+                elif action == 'kill':
+                    self.kill_server()
             
             @self.socketio.on('request_status')
             def handle_status_request():
