@@ -2328,79 +2328,6 @@ Created by: Aikar (Empire Minecraft)"""
                         gap: 15px;
                     }
                     
-                    /* Checkbox Styles */
-                    .checkbox-container {
-                        display: flex;
-                        align-items: center;
-                        cursor: pointer;
-                        font-size: 14px;
-                        color: #ecf0f1;
-                        user-select: none;
-                    }
-                    
-                    .checkbox-container input[type="checkbox"] {
-                        display: none;
-                    }
-                    
-                    .checkmark {
-                        width: 18px;
-                        height: 18px;
-                        background: rgba(52, 73, 94, 0.8);
-                        border: 2px solid rgba(255, 255, 255, 0.3);
-                        border-radius: 4px;
-                        margin-right: 8px;
-                        position: relative;
-                        transition: all 0.3s ease;
-                    }
-                    
-                    .checkbox-container input[type="checkbox"]:checked + .checkmark {
-                        background: linear-gradient(45deg, #3498db, #2980b9);
-                        border-color: #3498db;
-                    }
-                    
-                    .checkbox-container input[type="checkbox"]:checked + .checkmark::after {
-                        content: '✓';
-                        position: absolute;
-                        top: -2px;
-                        left: 2px;
-                        color: white;
-                        font-size: 14px;
-                        font-weight: bold;
-                    }
-                    
-                    .file-checkbox {
-                        margin-right: 10px;
-                    }
-                    
-                    /* Button Variants */
-                    .btn.delete {
-                        background: linear-gradient(45deg, #e74c3c, #c0392b);
-                    }
-                    
-                    .btn.delete:hover {
-                        box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
-                    }
-                    
-                    .btn.rename {
-                        background: linear-gradient(45deg, #f39c12, #e67e22);
-                    }
-                    
-                    .btn.rename:hover {
-                        box-shadow: 0 8px 25px rgba(243, 156, 18, 0.4);
-                    }
-                    
-                    .btn:disabled {
-                        background: rgba(127, 140, 141, 0.5);
-                        cursor: not-allowed;
-                        transform: none;
-                        box-shadow: none;
-                    }
-                    
-                    .btn:disabled:hover {
-                        transform: none;
-                        box-shadow: none;
-                    }
-                    
                     .breadcrumb { 
                         background: rgba(44, 62, 80, 0.6);
                         padding: 15px 20px; 
@@ -2948,14 +2875,7 @@ Created by: Aikar (Empire Minecraft)"""
                              <div class="file-list-header">
                                  <h3>📂 Server Files</h3>
                                  <div class="file-actions">
-                                     <label class="checkbox-container">
-                                         <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
-                                         <span class="checkmark"></span>
-                                         Select All
-                                     </label>
                                      <button class="btn new" onclick="showNewFileModal()">📄 New File</button>
-                                     <button class="btn delete" id="delete-btn" onclick="deleteSelected()" disabled>🗑️ Delete</button>
-                                     <button class="btn rename" id="rename-btn" onclick="renameSelected()" disabled>✏️ Rename</button>
                                  </div>
                              </div>
                             <div class="breadcrumb" id="breadcrumb">Loading...</div>
@@ -3052,19 +2972,12 @@ Created by: Aikar (Empire Minecraft)"""
                                     const size = item.is_directory ? '' : formatFileSize(item.size);
                                     
                                     fileItem.innerHTML = `
-                                        <label class="checkbox-container file-checkbox" onclick="event.stopPropagation()">
-                                            <input type="checkbox" class="file-select" onchange="updateActionButtons()">
-                                            <span class="checkmark"></span>
-                                        </label>
                                         <span class="file-icon">${icon}</span>
                                         <span class="file-info">${item.name}</span>
                                         <span class="file-size">${size}</span>
                                     `;
                                     
                                     fileItem.onclick = (e) => {
-                                        // Don't trigger if clicking on checkbox
-                                        if (e.target.closest('.file-checkbox')) return;
-                                        
                                         if (item.is_directory) {
                                             loadFiles(item.path);
                                         } else {
@@ -3332,139 +3245,6 @@ Created by: Aikar (Empire Minecraft)"""
                      // Update monitor every 2 seconds
                      setInterval(updateServerMonitor, 2000);
                      updateServerMonitor(); // Initial update
-                     
-                     // File Selection and Operations
-                     function toggleSelectAll() {
-                         const selectAllCheckbox = document.getElementById('select-all');
-                         const fileCheckboxes = document.querySelectorAll('.file-select');
-                         
-                         fileCheckboxes.forEach(checkbox => {
-                             checkbox.checked = selectAllCheckbox.checked;
-                         });
-                         
-                         updateActionButtons();
-                     }
-                     
-                     function updateActionButtons() {
-                         const selectedFiles = getSelectedFiles();
-                         const deleteBtn = document.getElementById('delete-btn');
-                         const renameBtn = document.getElementById('rename-btn');
-                         
-                         deleteBtn.disabled = selectedFiles.length === 0;
-                         renameBtn.disabled = selectedFiles.length !== 1; // Only allow rename for single file
-                         
-                         // Update select all checkbox state
-                         const selectAllCheckbox = document.getElementById('select-all');
-                         const fileCheckboxes = document.querySelectorAll('.file-select');
-                         const checkedCount = document.querySelectorAll('.file-select:checked').length;
-                         
-                         if (checkedCount === 0) {
-                             selectAllCheckbox.indeterminate = false;
-                             selectAllCheckbox.checked = false;
-                         } else if (checkedCount === fileCheckboxes.length) {
-                             selectAllCheckbox.indeterminate = false;
-                             selectAllCheckbox.checked = true;
-                         } else {
-                             selectAllCheckbox.indeterminate = true;
-                         }
-                     }
-                     
-                     function getSelectedFiles() {
-                         const selectedFiles = [];
-                         const checkedBoxes = document.querySelectorAll('.file-select:checked');
-                         
-                         checkedBoxes.forEach(checkbox => {
-                             const fileItem = checkbox.closest('.file-item');
-                             selectedFiles.push({
-                                 path: fileItem.dataset.path,
-                                 name: fileItem.dataset.name,
-                                 isDirectory: fileItem.dataset.isDirectory === 'true'
-                             });
-                         });
-                         
-                         return selectedFiles;
-                     }
-                     
-                     function deleteSelected() {
-                         const selectedFiles = getSelectedFiles();
-                         if (selectedFiles.length === 0) return;
-                         
-                         const fileNames = selectedFiles.map(f => f.name).join(', ');
-                         const confirmMessage = `Are you sure you want to delete ${selectedFiles.length} item(s)?\n\n${fileNames}`;
-                         
-                         if (!confirm(confirmMessage)) return;
-                         
-                         // Delete files one by one
-                         let deletedCount = 0;
-                         let errors = [];
-                         
-                         selectedFiles.forEach((file, index) => {
-                             fetch(`/api/file/${encodeURIComponent(file.path)}`, {
-                                 method: 'DELETE'
-                             })
-                             .then(response => response.json())
-                             .then(data => {
-                                 if (data.error) {
-                                     errors.push(`${file.name}: ${data.error}`);
-                                 } else {
-                                     deletedCount++;
-                                 }
-                                 
-                                 // Check if this is the last file
-                                 if (index === selectedFiles.length - 1) {
-                                     if (errors.length > 0) {
-                                         alert(`Deleted ${deletedCount} file(s). Errors:\n${errors.join('\n')}`);
-                                     } else {
-                                         alert(`Successfully deleted ${deletedCount} file(s)!`);
-                                     }
-                                     loadFiles(currentPath); // Refresh file list
-                                 }
-                             })
-                             .catch(error => {
-                                 errors.push(`${file.name}: ${error.message}`);
-                                 if (index === selectedFiles.length - 1) {
-                                     alert(`Deleted ${deletedCount} file(s). Errors:\n${errors.join('\n')}`);
-                                     loadFiles(currentPath);
-                                 }
-                             });
-                         });
-                     }
-                     
-                     function renameSelected() {
-                         const selectedFiles = getSelectedFiles();
-                         if (selectedFiles.length !== 1) return;
-                         
-                         const file = selectedFiles[0];
-                         const newName = prompt(`Rename "${file.name}" to:`, file.name);
-                         
-                         if (!newName || newName === file.name) return;
-                         
-                         // Construct new path
-                         const pathParts = file.path.split('/');
-                         pathParts[pathParts.length - 1] = newName;
-                         const newPath = pathParts.join('/');
-                         
-                         fetch(`/api/file/${encodeURIComponent(file.path)}/rename`, {
-                             method: 'POST',
-                             headers: {
-                                 'Content-Type': 'application/json',
-                             },
-                             body: JSON.stringify({ new_name: newName, new_path: newPath })
-                         })
-                         .then(response => response.json())
-                         .then(data => {
-                             if (data.error) {
-                                 alert('Error renaming file: ' + data.error);
-                             } else {
-                                 alert('File renamed successfully!');
-                                 loadFiles(currentPath); // Refresh file list
-                             }
-                         })
-                         .catch(error => {
-                             console.error('Error renaming file:', error);
-                             alert('Error renaming file: ' + error.message);
-                         });
-                     }
                 </script>
             </body>
             </html>
@@ -3597,78 +3377,6 @@ Created by: Aikar (Empire Minecraft)"""
                     )
                 except Exception as e:
                     return str(e), 500
-            
-            @self.web_server.route('/api/file/<path:filepath>', methods=['DELETE'])
-            def delete_file(filepath):
-                try:
-                    # Set the server directory as the base path
-                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
-                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
-                    
-                    # Security check
-                    if not abs_path.startswith(server_base_dir):
-                        return jsonify({'error': 'Access denied'}), 403
-                    
-                    if not os.path.exists(abs_path):
-                        return jsonify({'error': 'File not found'}), 404
-                    
-                    # Delete file or directory
-                    if os.path.isdir(abs_path):
-                        import shutil
-                        shutil.rmtree(abs_path)
-                        self.log_message(f"[WEB] Directory deleted: {filepath}")
-                    else:
-                        os.remove(abs_path)
-                        self.log_message(f"[WEB] File deleted: {filepath}")
-                    
-                    return jsonify({'success': True})
-                except Exception as e:
-                    return jsonify({'error': str(e)}), 500
-            
-            @self.web_server.route('/api/file/<path:filepath>/rename', methods=['POST'])
-            def rename_file(filepath):
-                try:
-                    # Set the server directory as the base path
-                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
-                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
-                    
-                    # Security check
-                    if not abs_path.startswith(server_base_dir):
-                        return jsonify({'error': 'Access denied'}), 403
-                    
-                    if not os.path.exists(abs_path):
-                        return jsonify({'error': 'File not found'}), 404
-                    
-                    data = request.get_json()
-                    new_name = data.get('new_name', '')
-                    
-                    if not new_name:
-                        return jsonify({'error': 'New name is required'}), 400
-                    
-                    # Construct new path
-                    parent_dir = os.path.dirname(abs_path)
-                    new_abs_path = os.path.join(parent_dir, new_name)
-                    
-                    # Security check for new path
-                    if not new_abs_path.startswith(server_base_dir):
-                        return jsonify({'error': 'Access denied'}), 403
-                    
-                    # Check if new name already exists
-                    if os.path.exists(new_abs_path):
-                        return jsonify({'error': 'A file with that name already exists'}), 400
-                    
-                    # Rename the file/directory
-                    os.rename(abs_path, new_abs_path)
-                    
-                    new_rel_path = os.path.relpath(new_abs_path, server_base_dir).replace('\\', '/')
-                    self.log_message(f"[WEB] Renamed: {filepath} -> {new_rel_path}")
-                    
-                    return jsonify({
-                        'success': True,
-                        'new_path': new_rel_path
-                    })
-                except Exception as e:
-                    return jsonify({'error': str(e)}), 500
             
             @self.web_server.route('/api/upload', methods=['POST'])
             def upload_files():

@@ -7,5 +7,5 @@
     "additional_args": "",
     "use_aikars_flags": false,
     "auto_start_server": false,
-    "startup_enabled": true
+    "startup_enabled": false
 }
