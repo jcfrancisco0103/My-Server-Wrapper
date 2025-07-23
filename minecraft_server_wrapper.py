@@ -8,6 +8,9 @@ import time
 from datetime import datetime
 import webbrowser
 import sys
+import psutil
+import re
+import winreg
 
 class MinecraftServerWrapper:
     def __init__(self, root):
@@ -19,10 +22,26 @@ class MinecraftServerWrapper:
         # Server process
         self.server_process = None
         self.server_running = False
+        self.startup_enabled_var = tk.BooleanVar()
+        
+        # Performance monitoring
+        self.tps_values = []
+        self.cpu_values = []
+        self.ram_values = []
+        self.monitoring_active = False
         
         # Configuration
         self.config_file = "server_config.json"
         self.load_config()
+        
+        # Check actual startup status and sync with config
+        actual_startup_status = self.check_startup_status()
+        if actual_startup_status != self.config.get("startup_enabled", False):
+            self.config["startup_enabled"] = actual_startup_status
+            self.save_config()
+        
+        # Set startup_enabled_var from config
+        self.startup_enabled_var.set(self.config.get("startup_enabled", False))
         
         self.setup_ui()
         
@@ -38,7 +57,9 @@ class MinecraftServerWrapper:
             "memory_max": "2G",
             "server_port": "25565",
             "additional_args": "",
-            "use_aikars_flags": False
+            "use_aikars_flags": False,
+            "auto_start_server": False,
+            "startup_enabled": False
         }
         
         try:
@@ -52,6 +73,7 @@ class MinecraftServerWrapper:
     
     def save_config(self):
         """Save server configuration to file"""
+        self.config["startup_enabled"] = self.startup_enabled_var.get()
         try:
             with open(self.config_file, 'w') as f:
                 json.dump(self.config, f, indent=4)
@@ -165,10 +187,28 @@ class MinecraftServerWrapper:
                                bg="#3498db", fg="white", font=("Arial", 8), width=8)
         info_button.grid(row=4, column=1, sticky="e", padx=5, pady=5)
         
+        # Auto-start server
+        self.auto_start_var = tk.BooleanVar()
+        self.auto_start_var.set(self.config.get("auto_start_server", False))
+        self.auto_start_var.trace('w', self.auto_save_config_trace)
+        auto_start_checkbox = tk.Checkbutton(config_grid, text="Auto-start server when app opens", 
+                                           variable=self.auto_start_var, fg="#ecf0f1", bg="#34495e",
+                                           selectcolor="#2c3e50", activebackground="#34495e",
+                                           activeforeground="#ecf0f1", font=("Arial", 9))
+        auto_start_checkbox.grid(row=5, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
+        # Windows startup checkbox
+        startup_checkbox = tk.Checkbutton(config_grid, text="Start with Windows (Run at startup)", 
+                                        variable=self.startup_enabled_var, fg="#ecf0f1", bg="#34495e",
+                                        selectcolor="#2c3e50", activebackground="#34495e",
+                                        activeforeground="#ecf0f1", font=("Arial", 9),
+                                        command=self.toggle_windows_startup)
+        startup_checkbox.grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
         # Save config button
         save_config_button = tk.Button(config_grid, text="Save Config", command=self.save_config_ui,
                                       bg="#9b59b6", fg="white", font=("Arial", 9, "bold"))
-        save_config_button.grid(row=5, column=0, columnspan=2, pady=10)
+        save_config_button.grid(row=6, column=0, columnspan=2, pady=10)
         
         # Server properties management
         properties_frame = tk.Frame(config_frame, bg="#34495e")
@@ -204,27 +244,44 @@ class MinecraftServerWrapper:
                                 font=("Arial", 12, "bold"), fg="#ecf0f1", bg="#34495e")
         console_title.pack(pady=5)
         
-        # Console output
+        # Console output (read-only)
         self.console_output = scrolledtext.ScrolledText(console_frame, height=15, 
                                                        bg="#1e1e1e", fg="#00ff00", 
-                                                       font=("Consolas", 9))
-        self.console_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+                                                       font=("Consolas", 9),
+                                                       state=tk.DISABLED, wrap=tk.WORD)
+        self.console_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
         
         # Command input
         command_frame = tk.Frame(console_frame, bg="#34495e")
         command_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
-        tk.Label(command_frame, text="Command:", fg="#ecf0f1", bg="#34495e").pack(side=tk.LEFT)
-        self.command_entry = tk.Entry(command_frame, bg="#ecf0f1")
-        self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        # Command input label
+        command_label = tk.Label(command_frame, text="Command/Chat:", 
+                                font=("Arial", 9, "bold"), fg="#ecf0f1", bg="#34495e")
+        command_label.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Command input field
+        self.command_entry = tk.Entry(command_frame, bg="#34495e", fg="#ecf0f1", 
+                                     font=("Consolas", 9), insertbackground="#ecf0f1")
+        self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         self.command_entry.bind("<Return>", self.send_command)
         
+        # Send button
         send_button = tk.Button(command_frame, text="Send", command=self.send_command,
-                               bg="#3498db", fg="white")
+                               bg="#27ae60", fg="white", font=("Arial", 9, "bold"))
         send_button.pack(side=tk.RIGHT)
+        
+        # Performance monitoring frame
+        self.setup_performance_monitor(main_frame)
         
         # Initial console message
         self.log_message("Minecraft Server Wrapper initialized. Configure your server and click 'Start Server'.")
+        
+        # Check for auto-start after UI is fully loaded
+        self.root.after(1000, self.check_auto_start)
+        
+        # Start performance monitoring
+        self.start_performance_monitoring()
     
     def browse_jar(self):
         """Browse for server JAR file"""
@@ -245,6 +302,8 @@ class MinecraftServerWrapper:
         self.config["memory_max"] = self.max_memory_entry.get()
         self.config["server_port"] = self.port_entry.get()
         self.config["use_aikars_flags"] = self.aikars_flags_var.get()
+        self.config["auto_start_server"] = self.auto_start_var.get()
+        self.config["startup_enabled"] = self.startup_enabled_var.get()
         
         self.save_config()
         self.log_message("Configuration saved successfully!")
@@ -254,8 +313,12 @@ class MinecraftServerWrapper:
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}\n"
         
+        # Enable text widget temporarily to insert text
+        self.console_output.config(state=tk.NORMAL)
         self.console_output.insert(tk.END, formatted_message)
         self.console_output.see(tk.END)
+        # Disable text widget to make it read-only
+        self.console_output.config(state=tk.DISABLED)
     
     def start_server(self):
         """Start the Minecraft server"""
@@ -311,6 +374,9 @@ class MinecraftServerWrapper:
             # Start output reader thread
             threading.Thread(target=self.read_server_output, daemon=True).start()
             
+            # Enable performance monitoring
+            self.monitoring_active = True
+            
             self.log_message("Server started successfully!")
             
         except Exception as e:
@@ -339,6 +405,7 @@ class MinecraftServerWrapper:
         
         self.server_running = False
         self.server_process = None
+        self.monitoring_active = False
         self.update_ui_state()
         self.log_message("Server stopped.")
     
@@ -350,22 +417,36 @@ class MinecraftServerWrapper:
         self.start_server()
     
     def send_command(self, event=None):
-        """Send command to server"""
-        if not self.server_running or not self.server_process:
-            self.log_message("Server is not running!")
-            return
-        
+        """Send command to server or as chat message"""
         command = self.command_entry.get().strip()
         if not command:
             return
-        
+            
+        if not self.server_running or not self.server_process:
+            self.log_message("Server is not running. Cannot send command.")
+            return
+            
         try:
-            self.server_process.stdin.write(f"{command}\n")
+            # Check if it's a server command (starts with /) or chat message
+            if command.startswith('/'):
+                # Server command
+                actual_command = command[1:]  # Remove the leading /
+                self.log_message(f"[ADMIN COMMAND] /{actual_command}")
+                self.server_process.stdin.write(f"{actual_command}\n")
+            else:
+                # Chat message - use 'say' command to broadcast
+                self.log_message(f"[ADMIN CHAT] {command}")
+                self.server_process.stdin.write(f"say [ADMIN] {command}\n")
+                
             self.server_process.stdin.flush()
-            self.log_message(f"Command sent: {command}")
             self.command_entry.delete(0, tk.END)
+            
         except Exception as e:
-            self.log_message(f"Failed to send command: {str(e)}")
+            self.log_message(f"Error sending command: {str(e)}")
+    
+    def send_command_from_entry(self, event=None):
+        """Wrapper method for send_command to handle both button click and Enter key"""
+        self.send_command(event)
     
     def read_server_output(self):
         """Read server output in a separate thread"""
@@ -373,6 +454,10 @@ class MinecraftServerWrapper:
             while self.server_running and self.server_process:
                 line = self.server_process.stdout.readline()
                 if line:
+                    # Parse TPS if monitoring is active
+                    if self.monitoring_active:
+                        self.parse_tps_from_output(line)
+                    
                     # Schedule UI update in main thread
                     self.root.after(0, lambda: self.log_message(f"[SERVER] {line.strip()}"))
                 elif self.server_process.poll() is not None:
@@ -383,6 +468,7 @@ class MinecraftServerWrapper:
         # Server process ended
         self.server_running = False
         self.server_process = None
+        self.monitoring_active = False
         self.root.after(0, self.update_ui_state)
         self.root.after(0, lambda: self.log_message("Server process ended."))
     
@@ -688,6 +774,8 @@ Created by: Aikar (Empire Minecraft)"""
             self.config["memory_max"] = self.max_memory_entry.get()
             self.config["server_port"] = self.port_entry.get()
             self.config["use_aikars_flags"] = self.aikars_flags_var.get()
+            self.config["auto_start_server"] = self.auto_start_var.get()
+            self.config["startup_enabled"] = self.startup_enabled_var.get()
             
             self.save_config()
         except Exception as e:
@@ -718,6 +806,292 @@ Created by: Aikar (Empire Minecraft)"""
                 self.root.destroy()
         else:
             self.root.destroy()
+    
+    def check_auto_start(self):
+        """Check if auto-start is enabled and start server if configured"""
+        if self.config.get("auto_start_server", False):
+            jar_path = self.jar_entry.get().strip()
+            if jar_path and os.path.exists(jar_path):
+                self.log_message("Auto-start enabled - Starting server automatically...")
+                self.start_server()
+            else:
+                self.log_message("Auto-start enabled but no valid server JAR configured. Please select a server JAR file.")
+                messagebox.showwarning("Auto-start Warning", 
+                                     "Auto-start is enabled but no valid server JAR is configured.\n"
+                                     "Please select a server JAR file to enable auto-start functionality.")
+    
+    def setup_performance_monitor(self, parent):
+        """Setup the performance monitoring UI"""
+        # Performance monitoring frame
+        perf_frame = tk.Frame(parent, bg="#34495e", relief=tk.RAISED, bd=2)
+        perf_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        perf_title = tk.Label(perf_frame, text="Performance Monitor", 
+                             font=("Arial", 12, "bold"), fg="#ecf0f1", bg="#34495e")
+        perf_title.pack(pady=5)
+        
+        # Performance metrics frame
+        metrics_frame = tk.Frame(perf_frame, bg="#34495e")
+        metrics_frame.pack(padx=10, pady=10)
+        
+        # TPS (Ticks Per Second)
+        tps_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
+        tps_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        
+        tk.Label(tps_frame, text="TPS", font=("Arial", 10, "bold"), 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
+        self.tps_label = tk.Label(tps_frame, text="--", font=("Arial", 14, "bold"), 
+                                 fg="#27ae60", bg="#2c3e50")
+        self.tps_label.pack(pady=2)
+        tk.Label(tps_frame, text="(Target: 20)", font=("Arial", 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack()
+        
+        # CPU Usage
+        cpu_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
+        cpu_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        
+        tk.Label(cpu_frame, text="CPU", font=("Arial", 10, "bold"), 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
+        self.cpu_label = tk.Label(cpu_frame, text="--", font=("Arial", 14, "bold"), 
+                                 fg="#3498db", bg="#2c3e50")
+        self.cpu_label.pack(pady=2)
+        tk.Label(cpu_frame, text="(Server Process)", font=("Arial", 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack()
+        
+        # RAM Usage
+        ram_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
+        ram_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        
+        tk.Label(ram_frame, text="RAM", font=("Arial", 10, "bold"), 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
+        self.ram_label = tk.Label(ram_frame, text="--", font=("Arial", 14, "bold"), 
+                                 fg="#e67e22", bg="#2c3e50")
+        self.ram_label.pack(pady=2)
+        tk.Label(ram_frame, text="(Server Process)", font=("Arial", 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack()
+        
+        # System RAM
+        sys_ram_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
+        sys_ram_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        
+        tk.Label(sys_ram_frame, text="System RAM", font=("Arial", 10, "bold"), 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
+        self.sys_ram_label = tk.Label(sys_ram_frame, text="--", font=("Arial", 14, "bold"), 
+                                     fg="#9b59b6", bg="#2c3e50")
+        self.sys_ram_label.pack(pady=2)
+        tk.Label(sys_ram_frame, text="(Total Usage)", font=("Arial", 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack()
+    
+    def start_performance_monitoring(self):
+        """Start the performance monitoring loop"""
+        self.update_performance_metrics()
+    
+    def update_performance_metrics(self):
+        """Update performance metrics display"""
+        try:
+            # Update TPS from server output
+            self.update_tps_display()
+            
+            # Update CPU and RAM if server is running
+            if self.server_running and self.server_process:
+                self.update_cpu_ram_metrics()
+            else:
+                self.cpu_label.config(text="--")
+                self.ram_label.config(text="--")
+            
+            # Update system RAM
+            self.update_system_ram()
+            
+        except Exception as e:
+            # Silently handle errors to avoid disrupting the UI
+            pass
+        
+        # Schedule next update
+        self.root.after(2000, self.update_performance_metrics)  # Update every 2 seconds
+    
+    def update_tps_display(self):
+        """Update TPS display based on recent values"""
+        if self.tps_values:
+            # Get average of recent TPS values
+            recent_tps = self.tps_values[-5:]  # Last 5 values
+            avg_tps = sum(recent_tps) / len(recent_tps)
+            
+            # Color code based on TPS
+            if avg_tps >= 19.5:
+                color = "#27ae60"  # Green
+            elif avg_tps >= 18:
+                color = "#f39c12"  # Orange
+            else:
+                color = "#e74c3c"  # Red
+            
+            self.tps_label.config(text=f"{avg_tps:.1f}", fg=color)
+        else:
+            if self.server_running:
+                self.tps_label.config(text="Calculating...", fg="#bdc3c7")
+            else:
+                self.tps_label.config(text="--", fg="#bdc3c7")
+    
+    def update_cpu_ram_metrics(self):
+        """Update CPU and RAM metrics for the server process"""
+        try:
+            if self.server_process and self.server_process.poll() is None:
+                # Get process info
+                process = psutil.Process(self.server_process.pid)
+                
+                # CPU usage (percentage)
+                cpu_percent = process.cpu_percent()
+                
+                # RAM usage (in MB)
+                memory_info = process.memory_info()
+                ram_mb = memory_info.rss / 1024 / 1024
+                
+                # Update displays
+                self.cpu_label.config(text=f"{cpu_percent:.1f}%")
+                
+                if ram_mb >= 1024:
+                    self.ram_label.config(text=f"{ram_mb/1024:.1f}GB")
+                else:
+                    self.ram_label.config(text=f"{ram_mb:.0f}MB")
+                
+                # Store values for history
+                self.cpu_values.append(cpu_percent)
+                self.ram_values.append(ram_mb)
+                
+                # Keep only recent values (last 30 readings)
+                if len(self.cpu_values) > 30:
+                    self.cpu_values.pop(0)
+                if len(self.ram_values) > 30:
+                    self.ram_values.pop(0)
+                    
+        except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+            self.cpu_label.config(text="--")
+            self.ram_label.config(text="--")
+    
+    def update_system_ram(self):
+        """Update system RAM usage"""
+        try:
+            # Get system memory info
+            memory = psutil.virtual_memory()
+            used_gb = memory.used / 1024 / 1024 / 1024
+            total_gb = memory.total / 1024 / 1024 / 1024
+            percent = memory.percent
+            
+            # Color code based on usage
+            if percent < 70:
+                color = "#27ae60"  # Green
+            elif percent < 85:
+                color = "#f39c12"  # Orange
+            else:
+                color = "#e74c3c"  # Red
+            
+            self.sys_ram_label.config(text=f"{used_gb:.1f}GB\n({percent:.0f}%)", fg=color)
+            
+        except Exception:
+            self.sys_ram_label.config(text="--")
+    
+    def parse_tps_from_output(self, line):
+        """Parse TPS information from server output"""
+        # Look for TPS in server output (common patterns)
+        tps_patterns = [
+            r"TPS from last 1m, 5m, 15m: ([0-9.]+)",  # Paper/Spigot
+            r"Current TPS = ([0-9.]+)",  # Some plugins
+            r"TPS: ([0-9.]+)",  # Generic TPS
+            r"\*\s*([0-9.]+)\s*TPS",  # Some TPS plugins
+        ]
+        
+        for pattern in tps_patterns:
+            match = re.search(pattern, line)
+            if match:
+                try:
+                    tps = float(match.group(1))
+                    if 0 <= tps <= 20:  # Valid TPS range
+                        self.tps_values.append(tps)
+                        # Keep only recent values
+                        if len(self.tps_values) > 20:
+                            self.tps_values.pop(0)
+                        return tps
+                except ValueError:
+                    pass
+        return None
+    
+    def toggle_windows_startup(self):
+        """Toggle Windows startup registry entry"""
+        try:
+            if self.startup_enabled_var.get():
+                self.add_to_startup()
+                self.log_message("Added to Windows startup successfully!")
+            else:
+                self.remove_from_startup()
+                self.log_message("Removed from Windows startup successfully!")
+            
+            # Auto-save the configuration
+            self.auto_save_config()
+            
+        except Exception as e:
+            self.log_message(f"Error managing Windows startup: {str(e)}")
+            # Revert the checkbox state on error
+            self.startup_enabled_var.set(not self.startup_enabled_var.get())
+    
+    def add_to_startup(self):
+        """Add application to Windows startup"""
+        try:
+            # Get the path to the current script
+            if getattr(sys, 'frozen', False):
+                # Running as compiled executable
+                app_path = sys.executable
+            else:
+                # Running as Python script
+                app_path = f'python "{os.path.abspath(__file__)}"'
+            
+            # Open the registry key for startup programs
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                                r"Software\Microsoft\Windows\CurrentVersion\Run", 
+                                0, winreg.KEY_SET_VALUE)
+            
+            # Set the registry value
+            winreg.SetValueEx(key, "MinecraftServerWrapper", 0, winreg.REG_SZ, app_path)
+            winreg.CloseKey(key)
+            
+        except Exception as e:
+            raise Exception(f"Failed to add to startup: {str(e)}")
+    
+    def remove_from_startup(self):
+        """Remove application from Windows startup"""
+        try:
+            # Open the registry key for startup programs
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                                r"Software\Microsoft\Windows\CurrentVersion\Run", 
+                                0, winreg.KEY_SET_VALUE)
+            
+            # Delete the registry value
+            try:
+                winreg.DeleteValue(key, "MinecraftServerWrapper")
+            except FileNotFoundError:
+                # Value doesn't exist, which is fine
+                pass
+            
+            winreg.CloseKey(key)
+            
+        except Exception as e:
+            raise Exception(f"Failed to remove from startup: {str(e)}")
+    
+    def check_startup_status(self):
+        """Check if application is currently in Windows startup"""
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                                r"Software\Microsoft\Windows\CurrentVersion\Run", 
+                                0, winreg.KEY_READ)
+            
+            try:
+                value, _ = winreg.QueryValueEx(key, "MinecraftServerWrapper")
+                winreg.CloseKey(key)
+                return True
+            except FileNotFoundError:
+                winreg.CloseKey(key)
+                return False
+                
+        except Exception:
+            return False
 
 def main():
     root = tk.Tk()
