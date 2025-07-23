@@ -15,7 +15,7 @@ import winreg
 class MinecraftServerWrapper:
     def __init__(self, root):
         self.root = root
-        self.root.title("Minecraft Server Wrapper")
+        self.root.title("Cacasians Minecraft Server Wrapper")
         self.root.geometry("800x600")
         self.root.configure(bg="#2c3e50")
         
@@ -90,7 +90,7 @@ class MinecraftServerWrapper:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Title
-        title_label = tk.Label(main_frame, text="Minecraft Server Wrapper", 
+        title_label = tk.Label(main_frame, text="Cacasians Minecraft Server Wrapper", 
                               font=("Arial", 16, "bold"), fg="#ecf0f1", bg="#2c3e50")
         title_label.pack(pady=(0, 20))
         
@@ -286,7 +286,7 @@ class MinecraftServerWrapper:
         self.setup_performance_monitor(main_frame)
         
         # Initial console message
-        self.log_message("Minecraft Server Wrapper initialized. Configure your server and click 'Start Server'.")
+        self.log_message("Cacasians initialized. Configure your server and click 'Start Server'.")
         
         # Check for auto-start after UI is fully loaded
         self.root.after(1000, self.check_auto_start)
