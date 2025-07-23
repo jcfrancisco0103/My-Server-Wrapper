@@ -1,0 +1,6 @@
+com.cacasians.servermanager.test.app-core-1.5.0-0 C:\Users\MersYeon\.gradle\caches\transforms-3\4dbc02607727b2c07c05c690663c5ea9\transformed\core-1.5.0\res
+com.cacasians.servermanager.test.app-annotation-experimental-1.3.0-1 C:\Users\MersYeon\.gradle\caches\transforms-3\e76cad1738651c713395f481fe6cf41e\transformed\annotation-experimental-1.3.0\res
+com.cacasians.servermanager.test.app-androidTest-2 C:\Users\MersYeon\Documents\My Server Wrapper\android\app\build\generated\res\resValues\androidTest\debug
+com.cacasians.servermanager.test.app-mergeDebugAndroidTestResources-3 C:\Users\MersYeon\Documents\My Server Wrapper\android\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\merged.dir
+com.cacasians.servermanager.test.app-mergeDebugAndroidTestResources-4 C:\Users\MersYeon\Documents\My Server Wrapper\android\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\stripped.dir
+com.cacasians.servermanager.test.app-merged_res-5 C:\Users\MersYeon\Documents\My Server Wrapper\android\app\build\intermediates\merged_res\debugAndroidTest

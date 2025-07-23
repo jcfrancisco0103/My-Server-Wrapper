@@ -19,16 +19,19 @@ class MinecraftServerWrapper:
     def __init__(self, root):
         self.root = root
         self.root.title("Cacasians Minecraft Server Wrapper")
-        self.root.geometry("800x600")
-        self.root.configure(bg="#2c3e50")
+        self.root.geometry("900x700")
+        self.root.configure(bg="#1e3c72")  # Gradient-like background color
+        self.root.resizable(True, True)
+        self.root.minsize(800, 600)
         
 
         
-        # Set default font to Microsoft Sans Serif
-        self.default_font = ("Microsoft Sans Serif", 10)
-        self.title_font = ("Microsoft Sans Serif", 16, "bold")
-        self.button_font = ("Microsoft Sans Serif", 10, "bold")
-        self.label_font = ("Microsoft Sans Serif", 10)
+        # Set default font to Segoe UI (matching web interface)
+        self.default_font = ("Segoe UI", 10)
+        self.title_font = ("Segoe UI", 18, "bold")
+        self.button_font = ("Segoe UI", 10, "bold")
+        self.label_font = ("Segoe UI", 10)
+        self.console_font = ("Consolas", 10)
         
         # Server process
         self.server_process = None
@@ -55,6 +58,12 @@ class MinecraftServerWrapper:
         # Configuration
         self.config_file = "server_config.json"
         self.load_config()
+        
+        # Console history storage
+        self.console_history = []
+        self.max_console_history = 1000
+        self.console_history_file = "console_history.json"
+        self.load_console_history()
         
         # Check actual startup status and sync with config
         actual_startup_status = self.check_startup_status()
@@ -108,217 +117,284 @@ class MinecraftServerWrapper:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save config: {str(e)}")
     
+    def load_console_history(self):
+        """Load console history from file"""
+        try:
+            if os.path.exists(self.console_history_file):
+                with open(self.console_history_file, 'r', encoding='utf-8') as f:
+                    self.console_history = json.load(f)
+                    # Limit history size
+                    if len(self.console_history) > self.max_console_history:
+                        self.console_history = self.console_history[-self.max_console_history:]
+        except Exception as e:
+            self.console_history = []
+            print(f"Could not load console history: {e}")
+    
+    def save_console_history(self):
+        """Save console history to file"""
+        try:
+            # Limit history size before saving
+            if len(self.console_history) > self.max_console_history:
+                self.console_history = self.console_history[-self.max_console_history:]
+            
+            with open(self.console_history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.console_history, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Could not save console history: {e}")
+    
+    def add_to_console_history(self, message):
+        """Add message to console history"""
+        timestamp = time.strftime("%H:%M:%S")
+        entry = {
+            "timestamp": timestamp,
+            "message": message,
+            "time": time.time()
+        }
+        self.console_history.append(entry)
+        
+        # Limit history size
+        if len(self.console_history) > self.max_console_history:
+            self.console_history = self.console_history[-self.max_console_history:]
+        
+        # Save periodically (every 10 messages)
+        if len(self.console_history) % 10 == 0:
+            self.save_console_history()
+    
     def setup_ui(self):
         """Setup the user interface"""
-        # Main frame
-        main_frame = tk.Frame(self.root, bg="#2c3e50")
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Main frame with gradient-like background
+        main_frame = tk.Frame(self.root, bg="#1e3c72")
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
         
-        # Title
+        # Title with improved styling
         title_label = tk.Label(main_frame, text="Cacasians Minecraft Server Wrapper", 
-                              font=self.title_font, fg="#ecf0f1", bg="#2c3e50")
-        title_label.pack(pady=(0, 20))
+                              font=self.title_font, fg="#ecf0f1", bg="#1e3c72")
+        title_label.pack(pady=(0, 25))
         
-        # Server controls frame
-        controls_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.RAISED, bd=2)
-        controls_frame.pack(fill=tk.X, pady=(0, 10))
+        # Server controls frame with modern styling
+        controls_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.GROOVE, bd=3)
+        controls_frame.pack(fill=tk.X, pady=(0, 15))
         
         controls_title = tk.Label(controls_frame, text="Server Controls", 
-                                 font=("Microsoft Sans Serif", 12, "bold"), fg="#ecf0f1", bg="#34495e")
-        controls_title.pack(pady=5)
+                                 font=(self.label_font[0], 14, "bold"), fg="#ecf0f1", bg="#34495e")
+        controls_title.pack(pady=8)
         
         # Buttons frame
         buttons_frame = tk.Frame(controls_frame, bg="#34495e")
-        buttons_frame.pack(pady=10)
+        buttons_frame.pack(pady=15)
         
-        self.start_button = tk.Button(buttons_frame, text="Start Server", 
+        # Modern styled buttons with better spacing
+        self.start_button = tk.Button(buttons_frame, text="▶ Start Server", 
                                      command=self.start_server, bg="#27ae60", fg="white",
-                                     font=self.button_font, width=12)
-        self.start_button.pack(side=tk.LEFT, padx=5)
+                                     font=self.button_font, width=14, height=2,
+                                     relief=tk.FLAT, bd=0, cursor="hand2")
+        self.start_button.pack(side=tk.LEFT, padx=8)
         
-        self.stop_button = tk.Button(buttons_frame, text="Stop Server", 
+        self.stop_button = tk.Button(buttons_frame, text="⏹ Stop Server", 
                                     command=self.stop_server, bg="#e74c3c", fg="white",
-                                    font=self.button_font, width=12, state=tk.DISABLED)
-        self.stop_button.pack(side=tk.LEFT, padx=5)
+                                    font=self.button_font, width=14, height=2, state=tk.DISABLED,
+                                    relief=tk.FLAT, bd=0, cursor="hand2")
+        self.stop_button.pack(side=tk.LEFT, padx=8)
         
-        self.restart_button = tk.Button(buttons_frame, text="Restart Server", 
+        self.restart_button = tk.Button(buttons_frame, text="🔄 Restart Server", 
                                        command=self.restart_server, bg="#f39c12", fg="white",
-                                       font=self.button_font, width=12, state=tk.DISABLED)
-        self.restart_button.pack(side=tk.LEFT, padx=5)
+                                       font=self.button_font, width=14, height=2, state=tk.DISABLED,
+                                       relief=tk.FLAT, bd=0, cursor="hand2")
+        self.restart_button.pack(side=tk.LEFT, padx=8)
         
-        # Status
+        # Status with better styling
         self.status_label = tk.Label(controls_frame, text="Status: Stopped", 
-                                    fg="#e74c3c", bg="#34495e", font=self.button_font)
-        self.status_label.pack(pady=5)
+                                    fg="#e74c3c", bg="#34495e", font=(self.button_font[0], 11, "bold"))
+        self.status_label.pack(pady=8)
         
-        # Configuration frame
-        config_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.RAISED, bd=2)
-        config_frame.pack(fill=tk.X, pady=(0, 10))
+        # Configuration frame with modern styling
+        config_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.GROOVE, bd=3)
+        config_frame.pack(fill=tk.X, pady=(0, 15))
         
         config_title = tk.Label(config_frame, text="Server Configuration", 
-                               font=("Microsoft Sans Serif", 12, "bold"), fg="#ecf0f1", bg="#34495e")
-        config_title.pack(pady=5)
+                               font=(self.label_font[0], 14, "bold"), fg="#ecf0f1", bg="#34495e")
+        config_title.pack(pady=8)
         
-        # Config grid
+        # Config grid with better spacing
         config_grid = tk.Frame(config_frame, bg="#34495e")
-        config_grid.pack(padx=10, pady=10)
+        config_grid.pack(padx=15, pady=15)
         
-        # Server JAR
-        tk.Label(config_grid, text="Server JAR:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        # Server JAR with modern styling
+        tk.Label(config_grid, text="Server JAR:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=0, column=0, sticky="w", padx=8, pady=5)
         jar_frame = tk.Frame(config_grid, bg="#34495e")
-        jar_frame.grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+        jar_frame.grid(row=0, column=1, sticky="ew", padx=8, pady=5)
         
-        self.jar_entry = tk.Entry(jar_frame, width=40, font=self.default_font)
-        self.jar_entry.pack(side=tk.LEFT, padx=(0, 5))
+        self.jar_entry = tk.Entry(jar_frame, width=45, font=self.default_font, 
+                                 bg="#2c3e50", fg="#ecf0f1", insertbackground="#ecf0f1",
+                                 relief=tk.FLAT, bd=5)
+        self.jar_entry.pack(side=tk.LEFT, padx=(0, 8))
         self.jar_entry.insert(0, self.config.get("server_jar", ""))
         self.jar_entry.bind('<FocusOut>', self.auto_save_config)
         self.jar_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
-        browse_button = tk.Button(jar_frame, text="Browse", command=self.browse_jar, bg="#3498db", fg="white", font=self.default_font)
+        browse_button = tk.Button(jar_frame, text="📁 Browse", command=self.browse_jar, 
+                                 bg="#3498db", fg="white", font=self.default_font,
+                                 relief=tk.FLAT, bd=0, cursor="hand2")
         browse_button.pack(side=tk.LEFT)
         
-        # Memory settings
-        tk.Label(config_grid, text="Min Memory:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        self.min_memory_entry = tk.Entry(config_grid, width=10, font=self.default_font)
-        self.min_memory_entry.grid(row=1, column=1, sticky="w", padx=5, pady=2)
+        # Memory settings with modern styling
+        tk.Label(config_grid, text="Min Memory:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=1, column=0, sticky="w", padx=8, pady=5)
+        self.min_memory_entry = tk.Entry(config_grid, width=12, font=self.default_font,
+                                        bg="#2c3e50", fg="#ecf0f1", insertbackground="#ecf0f1",
+                                        relief=tk.FLAT, bd=5)
+        self.min_memory_entry.grid(row=1, column=1, sticky="w", padx=8, pady=5)
         self.min_memory_entry.insert(0, self.config.get("memory_min", "1G"))
         self.min_memory_entry.bind('<FocusOut>', self.auto_save_config)
         self.min_memory_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
-        tk.Label(config_grid, text="Max Memory:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=2, column=0, sticky="w", padx=5, pady=2)
-        self.max_memory_entry = tk.Entry(config_grid, width=10, font=self.default_font)
-        self.max_memory_entry.grid(row=2, column=1, sticky="w", padx=5, pady=2)
+        tk.Label(config_grid, text="Max Memory:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=2, column=0, sticky="w", padx=8, pady=5)
+        self.max_memory_entry = tk.Entry(config_grid, width=12, font=self.default_font,
+                                        bg="#2c3e50", fg="#ecf0f1", insertbackground="#ecf0f1",
+                                        relief=tk.FLAT, bd=5)
+        self.max_memory_entry.grid(row=2, column=1, sticky="w", padx=8, pady=5)
         self.max_memory_entry.insert(0, self.config.get("memory_max", "2G"))
         self.max_memory_entry.bind('<FocusOut>', self.auto_save_config)
         self.max_memory_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
-        # Port
-        tk.Label(config_grid, text="Server Port:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=3, column=0, sticky="w", padx=5, pady=2)
-        self.port_entry = tk.Entry(config_grid, width=10, font=self.default_font)
-        self.port_entry.grid(row=3, column=1, sticky="w", padx=5, pady=2)
+        # Port with modern styling
+        tk.Label(config_grid, text="Server Port:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=3, column=0, sticky="w", padx=8, pady=5)
+        self.port_entry = tk.Entry(config_grid, width=12, font=self.default_font,
+                                  bg="#2c3e50", fg="#ecf0f1", insertbackground="#ecf0f1",
+                                  relief=tk.FLAT, bd=5)
+        self.port_entry.grid(row=3, column=1, sticky="w", padx=8, pady=5)
         self.port_entry.insert(0, self.config.get("server_port", "25565"))
         self.port_entry.bind('<FocusOut>', self.auto_save_config)
         self.port_entry.bind('<KeyRelease>', self.schedule_auto_save)
         
-        # Aikar's Flags
+        # Aikar's Flags with modern styling
         self.aikars_flags_var = tk.BooleanVar()
         self.aikars_flags_var.set(self.config.get("use_aikars_flags", False))
         self.aikars_flags_var.trace('w', self.auto_save_config_trace)
         aikars_checkbox = tk.Checkbutton(config_grid, text="Use Aikar's Flags (Optimized JVM)", 
                                         variable=self.aikars_flags_var, fg="#ecf0f1", bg="#34495e",
                                         selectcolor="#2c3e50", activebackground="#34495e",
-                                        activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9))
-        aikars_checkbox.grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+                                        activeforeground="#ecf0f1", font=self.label_font)
+        aikars_checkbox.grid(row=4, column=0, columnspan=2, sticky="w", padx=8, pady=8)
         
-        # Info button for Aikar's Flags
+        # Info button for Aikar's Flags with modern styling
         info_button = tk.Button(config_grid, text="ℹ️ Info", command=self.show_aikars_info,
-                               bg="#3498db", fg="white", font=("Microsoft Sans Serif", 8), width=8)
-        info_button.grid(row=4, column=1, sticky="e", padx=5, pady=5)
+                               bg="#3498db", fg="white", font=(self.default_font[0], 9), width=8,
+                               relief=tk.FLAT, bd=0, cursor="hand2")
+        info_button.grid(row=4, column=1, sticky="e", padx=8, pady=8)
         
-        # Auto-start server
+        # Auto-start server with modern styling
         self.auto_start_var = tk.BooleanVar()
         self.auto_start_var.set(self.config.get("auto_start_server", False))
         self.auto_start_var.trace('w', self.auto_save_config_trace)
         auto_start_checkbox = tk.Checkbutton(config_grid, text="Auto-start server when app opens", 
                                            variable=self.auto_start_var, fg="#ecf0f1", bg="#34495e",
                                            selectcolor="#2c3e50", activebackground="#34495e",
-                                           activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9))
-        auto_start_checkbox.grid(row=5, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+                                           activeforeground="#ecf0f1", font=self.label_font)
+        auto_start_checkbox.grid(row=5, column=0, columnspan=2, sticky="w", padx=8, pady=8)
         
-        # Windows startup checkbox
+        # Windows startup checkbox with modern styling
         startup_checkbox = tk.Checkbutton(config_grid, text="Start with Windows (Run at startup)", 
                                         variable=self.startup_enabled_var, fg="#ecf0f1", bg="#34495e",
                                         selectcolor="#2c3e50", activebackground="#34495e",
-                                        activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9),
+                                        activeforeground="#ecf0f1", font=self.label_font,
                                         command=self.toggle_windows_startup)
-        startup_checkbox.grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        startup_checkbox.grid(row=6, column=0, columnspan=2, sticky="w", padx=8, pady=8)
         
-        # Remote access checkbox
+        # Remote access checkbox with modern styling
         remote_access_checkbox = tk.Checkbutton(config_grid, text="Enable Remote Access (Web Interface)", 
                                                variable=self.remote_access_enabled, fg="#ecf0f1", bg="#34495e",
                                                selectcolor="#2c3e50", activebackground="#34495e",
-                                               activeforeground="#ecf0f1", font=("Microsoft Sans Serif", 9),
+                                               activeforeground="#ecf0f1", font=self.label_font,
                                                command=self.toggle_remote_access)
-        remote_access_checkbox.grid(row=7, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        remote_access_checkbox.grid(row=7, column=0, columnspan=2, sticky="w", padx=8, pady=8)
         
-        # Web port configuration
-        tk.Label(config_grid, text="Web Port:", fg="#ecf0f1", bg="#34495e", font=("Microsoft Sans Serif", 9)).grid(row=8, column=0, sticky="w", padx=5, pady=5)
-        self.web_port_entry = tk.Entry(config_grid, bg="#34495e", fg="#ecf0f1", font=("Microsoft Sans Serif", 9), width=10)
+        # Web port configuration with modern styling
+        tk.Label(config_grid, text="Web Port:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=8, column=0, sticky="w", padx=8, pady=8)
+        self.web_port_entry = tk.Entry(config_grid, bg="#2c3e50", fg="#ecf0f1", font=self.default_font, width=12,
+                                      insertbackground="#ecf0f1", relief=tk.FLAT, bd=5)
         self.web_port_entry.insert(0, str(self.config.get("web_port", 5000)))
-        self.web_port_entry.grid(row=8, column=1, sticky="w", padx=5, pady=5)
+        self.web_port_entry.grid(row=8, column=1, sticky="w", padx=8, pady=8)
         
-        # Save config button
-        save_config_button = tk.Button(config_grid, text="Save Config", command=self.save_config_ui,
-                                      bg="#9b59b6", fg="white", font=("Microsoft Sans Serif", 9, "bold"))
-        save_config_button.grid(row=9, column=0, columnspan=2, pady=10)
+        # Save config button with modern styling
+        save_config_button = tk.Button(config_grid, text="💾 Save Config", command=self.save_config_ui,
+                                      bg="#9b59b6", fg="white", font=self.button_font,
+                                      relief=tk.FLAT, bd=0, cursor="hand2", height=2)
+        save_config_button.grid(row=9, column=0, columnspan=2, pady=15)
         
-        # Server properties management
+        # Server properties management with modern styling
         properties_frame = tk.Frame(config_frame, bg="#34495e")
-        properties_frame.pack(pady=10)
+        properties_frame.pack(pady=15)
         
         properties_label = tk.Label(properties_frame, text="Server Properties Management:", 
-                                   fg="#ecf0f1", bg="#34495e", font=("Microsoft Sans Serif", 10, "bold"))
-        properties_label.pack(pady=(0, 5))
+                                   fg="#ecf0f1", bg="#34495e", font=(self.label_font[0], 11, "bold"))
+        properties_label.pack(pady=(0, 8))
         
         properties_buttons_frame = tk.Frame(properties_frame, bg="#34495e")
         properties_buttons_frame.pack()
         
-        self.open_properties_button = tk.Button(properties_buttons_frame, text="Open server.properties", 
+        self.open_properties_button = tk.Button(properties_buttons_frame, text="📄 Open server.properties", 
                                                command=self.open_server_properties, bg="#e67e22", fg="white",
-                                               font=("Microsoft Sans Serif", 9, "bold"), width=18)
-        self.open_properties_button.pack(side=tk.LEFT, padx=5)
+                                               font=self.default_font, width=20,
+                                               relief=tk.FLAT, bd=0, cursor="hand2")
+        self.open_properties_button.pack(side=tk.LEFT, padx=8)
         
-        self.edit_properties_button = tk.Button(properties_buttons_frame, text="Edit in Wrapper", 
+        self.edit_properties_button = tk.Button(properties_buttons_frame, text="✏️ Edit in Wrapper", 
                                                command=self.edit_server_properties, bg="#16a085", fg="white",
-                                               font=("Microsoft Sans Serif", 9, "bold"), width=15)
-        self.edit_properties_button.pack(side=tk.LEFT, padx=5)
+                                               font=self.default_font, width=17,
+                                               relief=tk.FLAT, bd=0, cursor="hand2")
+        self.edit_properties_button.pack(side=tk.LEFT, padx=8)
         
-        self.reload_properties_button = tk.Button(properties_buttons_frame, text="Reload Properties", 
+        self.reload_properties_button = tk.Button(properties_buttons_frame, text="🔄 Reload Properties", 
                                                  command=self.reload_server_properties, bg="#8e44ad", fg="white",
-                                                 font=("Microsoft Sans Serif", 9, "bold"), width=15)
-        self.reload_properties_button.pack(side=tk.LEFT, padx=5)
+                                                 font=self.default_font, width=17,
+                                                 relief=tk.FLAT, bd=0, cursor="hand2")
+        self.reload_properties_button.pack(side=tk.LEFT, padx=8)
         
-        # Console frame with blur effect
-        console_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.RAISED, bd=2)
-        console_frame.pack(fill=tk.BOTH, expand=True)
+        # Console frame with modern styling
+        console_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.GROOVE, bd=2)
+        console_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        console_title = tk.Label(console_frame, text="Server Console", 
-                                font=("Microsoft Sans Serif", 12, "bold"), fg="#ecf0f1", bg="#34495e")
-        console_title.pack(pady=5)
+        console_title = tk.Label(console_frame, text="🖥️ Server Console", 
+                                font=(self.title_font[0], 12, "bold"), fg="#ecf0f1", bg="#34495e")
+        console_title.pack(pady=10)
         
-        # Console output (read-only)
+        # Console output with modern styling
         self.console_output = scrolledtext.ScrolledText(console_frame, height=15, 
                                                        bg="#1e1e1e", fg="#00ff00", 
-                                                       font=("Microsoft Sans Serif", 9),
-                                                       state=tk.DISABLED, wrap=tk.WORD)
-        self.console_output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
+                                                       font=("Consolas", 10),
+                                                       state=tk.DISABLED, wrap=tk.WORD,
+                                                       relief=tk.FLAT, bd=5,
+                                                       insertbackground="#00ff00")
+        self.console_output.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 10))
         
-        # Command input
+        # Command input frame with modern styling
         command_frame = tk.Frame(console_frame, bg="#34495e")
-        command_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        command_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
         
-        # Mode toggle button
+        # Mode toggle button with modern styling
         self.mode_button = tk.Button(command_frame, text="CMD", command=self.toggle_input_mode,
-                                    bg="#3498db", fg="white", font=("Microsoft Sans Serif", 9, "bold"), width=5)
-        self.mode_button.pack(side=tk.LEFT, padx=(0, 5))
+                                    bg="#3498db", fg="white", font=self.button_font, width=6,
+                                    relief=tk.FLAT, bd=0, cursor="hand2")
+        self.mode_button.pack(side=tk.LEFT, padx=(0, 8))
         
-        # Command input label (dynamic based on mode)
+        # Command input label with modern styling
         self.command_label = tk.Label(command_frame, text="Command:", 
-                                     font=("Microsoft Sans Serif", 9, "bold"), fg="#ecf0f1", bg="#34495e")
-        self.command_label.pack(side=tk.LEFT, padx=(0, 5))
+                                     font=self.label_font, fg="#ecf0f1", bg="#34495e")
+        self.command_label.pack(side=tk.LEFT, padx=(0, 8))
         
-        # Command input field
-        self.command_entry = tk.Entry(command_frame, bg="#34495e", fg="#ecf0f1", 
-                                     font=("Microsoft Sans Serif", 9), insertbackground="#ecf0f1",
-                                     state=tk.NORMAL, relief=tk.SOLID, bd=1)
-        self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        # Command input field with modern styling
+        self.command_entry = tk.Entry(command_frame, bg="#2c3e50", fg="#ecf0f1", 
+                                     font=("Consolas", 10), insertbackground="#ecf0f1",
+                                     state=tk.NORMAL, relief=tk.FLAT, bd=5)
+        self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
         self.command_entry.bind("<Return>", self.send_command)
-        self.command_entry.bind("<Button-1>", self.focus_command_entry)  # Focus on click
-        self.command_entry.focus_set()  # Set initial focus to the command entry
+        self.command_entry.bind("<Button-1>", self.focus_command_entry)
+        self.command_entry.focus_set()
         
-        # Send button
-        send_button = tk.Button(command_frame, text="Send", command=self.send_command,
-                               bg="#27ae60", fg="white", font=("Microsoft Sans Serif", 9, "bold"))
+        # Send button with modern styling
+        send_button = tk.Button(command_frame, text="📤 Send", command=self.send_command,
+                               bg="#27ae60", fg="white", font=self.button_font,
+                               relief=tk.FLAT, bd=0, cursor="hand2")
         send_button.pack(side=tk.RIGHT)
         
         # Performance monitoring frame
@@ -364,6 +440,9 @@ class MinecraftServerWrapper:
         """Add message to console with timestamp"""
         timestamp = datetime.now().strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}\n"
+        
+        # Add to console history
+        self.add_to_console_history(message)
         
         # Enable text widget temporarily to insert text
         self.console_output.config(state=tk.NORMAL)
@@ -900,66 +979,66 @@ Created by: Aikar (Empire Minecraft)"""
                                      "Please select a server JAR file to enable auto-start functionality.")
     
     def setup_performance_monitor(self, parent):
-        """Setup the performance monitoring UI"""
-        # Performance monitoring frame
-        perf_frame = tk.Frame(parent, bg="#34495e", relief=tk.RAISED, bd=2)
-        perf_frame.pack(fill=tk.X, pady=(0, 10))
+        """Setup the performance monitoring UI with modern styling"""
+        # Performance monitoring frame with modern styling
+        perf_frame = tk.Frame(parent, bg="#34495e", relief=tk.GROOVE, bd=2)
+        perf_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
         
-        perf_title = tk.Label(perf_frame, text="Performance Monitor", 
-                             font=("Arial", 12, "bold"), fg="#ecf0f1", bg="#34495e")
-        perf_title.pack(pady=5)
+        perf_title = tk.Label(perf_frame, text="📊 Performance Monitor", 
+                             font=(self.title_font[0], 12, "bold"), fg="#ecf0f1", bg="#34495e")
+        perf_title.pack(pady=10)
         
-        # Performance metrics frame
+        # Performance metrics frame with modern styling
         metrics_frame = tk.Frame(perf_frame, bg="#34495e")
-        metrics_frame.pack(padx=10, pady=10)
+        metrics_frame.pack(padx=15, pady=15)
         
-        # TPS (Ticks Per Second)
-        tps_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
-        tps_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        # TPS (Ticks Per Second) with modern styling
+        tps_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.FLAT, bd=5)
+        tps_frame.pack(side=tk.LEFT, padx=8, pady=8, fill=tk.BOTH, expand=True)
         
-        tk.Label(tps_frame, text="TPS", font=("Arial", 10, "bold"), 
-                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
-        self.tps_label = tk.Label(tps_frame, text="--", font=("Arial", 14, "bold"), 
+        tk.Label(tps_frame, text="TPS", font=self.label_font, 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=5)
+        self.tps_label = tk.Label(tps_frame, text="--", font=(self.default_font[0], 16, "bold"), 
                                  fg="#27ae60", bg="#2c3e50")
-        self.tps_label.pack(pady=2)
-        tk.Label(tps_frame, text="(Target: 20)", font=("Arial", 8), 
-                fg="#bdc3c7", bg="#2c3e50").pack()
+        self.tps_label.pack(pady=5)
+        tk.Label(tps_frame, text="(Target: 20)", font=(self.default_font[0], 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack(pady=(0, 5))
         
-        # CPU Usage
-        cpu_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
-        cpu_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        # CPU Usage with modern styling
+        cpu_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.FLAT, bd=5)
+        cpu_frame.pack(side=tk.LEFT, padx=8, pady=8, fill=tk.BOTH, expand=True)
         
-        tk.Label(cpu_frame, text="CPU", font=("Arial", 10, "bold"), 
-                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
-        self.cpu_label = tk.Label(cpu_frame, text="--", font=("Arial", 14, "bold"), 
+        tk.Label(cpu_frame, text="CPU", font=self.label_font, 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=5)
+        self.cpu_label = tk.Label(cpu_frame, text="--", font=(self.default_font[0], 16, "bold"), 
                                  fg="#3498db", bg="#2c3e50")
-        self.cpu_label.pack(pady=2)
-        tk.Label(cpu_frame, text="(Server Process)", font=("Arial", 8), 
-                fg="#bdc3c7", bg="#2c3e50").pack()
+        self.cpu_label.pack(pady=5)
+        tk.Label(cpu_frame, text="(Server Process)", font=(self.default_font[0], 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack(pady=(0, 5))
         
-        # RAM Usage
-        ram_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
-        ram_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        # RAM Usage with modern styling
+        ram_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.FLAT, bd=5)
+        ram_frame.pack(side=tk.LEFT, padx=8, pady=8, fill=tk.BOTH, expand=True)
         
-        tk.Label(ram_frame, text="RAM", font=("Arial", 10, "bold"), 
-                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
-        self.ram_label = tk.Label(ram_frame, text="--", font=("Arial", 14, "bold"), 
+        tk.Label(ram_frame, text="RAM", font=self.label_font, 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=5)
+        self.ram_label = tk.Label(ram_frame, text="--", font=(self.default_font[0], 16, "bold"), 
                                  fg="#e67e22", bg="#2c3e50")
-        self.ram_label.pack(pady=2)
-        tk.Label(ram_frame, text="(Server Process)", font=("Arial", 8), 
-                fg="#bdc3c7", bg="#2c3e50").pack()
+        self.ram_label.pack(pady=5)
+        tk.Label(ram_frame, text="(Server Process)", font=(self.default_font[0], 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack(pady=(0, 5))
         
-        # System RAM
-        sys_ram_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.RAISED, bd=1)
-        sys_ram_frame.pack(side=tk.LEFT, padx=5, pady=5, fill=tk.BOTH, expand=True)
+        # System RAM with modern styling
+        sys_ram_frame = tk.Frame(metrics_frame, bg="#2c3e50", relief=tk.FLAT, bd=5)
+        sys_ram_frame.pack(side=tk.LEFT, padx=8, pady=8, fill=tk.BOTH, expand=True)
         
-        tk.Label(sys_ram_frame, text="System RAM", font=("Arial", 10, "bold"), 
-                fg="#ecf0f1", bg="#2c3e50").pack(pady=2)
-        self.sys_ram_label = tk.Label(sys_ram_frame, text="--", font=("Arial", 14, "bold"), 
+        tk.Label(sys_ram_frame, text="System RAM", font=self.label_font, 
+                fg="#ecf0f1", bg="#2c3e50").pack(pady=5)
+        self.sys_ram_label = tk.Label(sys_ram_frame, text="--", font=(self.default_font[0], 16, "bold"), 
                                      fg="#9b59b6", bg="#2c3e50")
-        self.sys_ram_label.pack(pady=2)
-        tk.Label(sys_ram_frame, text="(Total Usage)", font=("Arial", 8), 
-                fg="#bdc3c7", bg="#2c3e50").pack()
+        self.sys_ram_label.pack(pady=5)
+        tk.Label(sys_ram_frame, text="(Total Usage)", font=(self.default_font[0], 8), 
+                fg="#bdc3c7", bg="#2c3e50").pack(pady=(0, 5))
     
     def start_performance_monitoring(self):
         """Start the performance monitoring loop"""
@@ -1215,92 +1294,411 @@ Created by: Aikar (Empire Minecraft)"""
                 <title>Cacasians - Remote Server Control</title>
                 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
                 <style>
+                    * {
+                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    
                     body { 
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif; 
-                        background: #2c3e50; 
+                        font-family: 'Segoe UI', 'Microsoft Sans Serif', Arial, sans-serif; 
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                         color: #ecf0f1; 
                         margin: 0; 
-                        padding: 20px; 
+                        padding: 20px;
+                        min-height: 100vh;
+                        animation: fadeIn 0.8s ease-out;
                     }
-                    .container { max-width: 1200px; margin: 0 auto; }
-                    .header { text-align: center; margin-bottom: 30px; }
-                    .nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
-                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .nav-btn.active { background: #3498db; }
+                    
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(20px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    
+                    @keyframes slideIn {
+                        from { transform: translateX(-20px); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    
+                    @keyframes pulse {
+                        0% { transform: scale(1); }
+                        50% { transform: scale(1.05); }
+                        100% { transform: scale(1); }
+                    }
+                    
+                    @keyframes glow {
+                        0% { box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); }
+                        50% { box-shadow: 0 0 20px rgba(52, 152, 219, 0.8); }
+                        100% { box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); }
+                    }
+                    
+                    .container { 
+                        max-width: 1400px; 
+                        margin: 0 auto; 
+                        animation: slideIn 0.6s ease-out;
+                    }
+                    
+                    .header { 
+                        text-align: center; 
+                        margin-bottom: 30px; 
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border-radius: 15px;
+                        padding: 20px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .header:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                    }
+                    
+                    .header h1 {
+                        font-size: 2.5em;
+                        margin-bottom: 15px;
+                        background: linear-gradient(45deg, #3498db, #e74c3c);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        background-clip: text;
+                        animation: pulse 2s infinite;
+                    }
+                    
+                    .nav { 
+                        display: flex; 
+                        gap: 15px; 
+                        margin-bottom: 20px; 
+                        justify-content: center; 
+                    }
+                    
+                    .nav-btn { 
+                        padding: 12px 25px; 
+                        background: rgba(52, 73, 94, 0.8);
+                        color: #ecf0f1; 
+                        text-decoration: none; 
+                        border-radius: 25px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
+                        border: 2px solid transparent;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    
+                    .nav-btn::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+                        transition: left 0.5s;
+                    }
+                    
+                    .nav-btn:hover::before {
+                        left: 100%;
+                    }
+                    
+                    .nav-btn:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+                        border-color: #3498db;
+                    }
+                    
+                    .nav-btn.active { 
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        animation: glow 2s infinite;
+                    }
+                    
                     .console { 
-                        background: #1e1e1e; 
+                        background: rgba(30, 30, 30, 0.95);
                         color: #00ff00; 
-                        padding: 15px; 
+                        padding: 20px; 
                         height: 400px; 
                         overflow-y: scroll; 
-                        font-family: 'Microsoft Sans Serif', monospace; 
-                        border: 2px solid #34495e; 
+                        font-family: 'Consolas', 'Courier New', monospace; 
+                        font-size: 14px;
+                        line-height: 1.4;
+                        border: 2px solid rgba(52, 73, 94, 0.5);
+                        border-radius: 15px;
+                        backdrop-filter: blur(10px);
+                        transition: all 0.3s ease;
+                        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+                        white-space: pre-wrap;
+                        word-wrap: break-word;
                     }
-                    .input-section { margin-top: 20px; display: flex; gap: 10px; }
-                    .mode-btn { padding: 10px 20px; background: #3498db; color: white; border: none; cursor: pointer; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .mode-btn.chat { background: #e67e22; }
-                    input[type="text"] { flex: 1; padding: 10px; background: #34495e; color: #ecf0f1; border: 1px solid #555; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .send-btn { padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .controls { display: flex; gap: 10px; margin-bottom: 20px; }
-                    .control-btn { padding: 10px 20px; background: #9b59b6; color: white; border: none; cursor: pointer; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .status { padding: 10px; background: #34495e; margin-bottom: 20px; border-radius: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                    
+                    .console:hover {
+                        border-color: #3498db;
+                        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5), 0 0 20px rgba(52, 152, 219, 0.3);
+                    }
+                    
+                    .input-section { 
+                        margin-top: 20px; 
+                        display: flex; 
+                        gap: 15px;
+                        animation: slideIn 0.8s ease-out;
+                    }
+                    
+                    .mode-btn { 
+                        padding: 12px 25px; 
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        color: white; 
+                        border: none; 
+                        cursor: pointer; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        border-radius: 25px;
+                        transition: all 0.3s ease;
+                        font-weight: bold;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    
+                    .mode-btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+                    }
+                    
+                    .mode-btn.chat { 
+                        background: linear-gradient(45deg, #e67e22, #d35400);
+                    }
+                    
+                    .mode-btn.chat:hover {
+                        box-shadow: 0 8px 25px rgba(230, 126, 34, 0.4);
+                    }
+                    
+                    input[type="text"] { 
+                        flex: 1; 
+                        padding: 12px 20px; 
+                        background: rgba(52, 73, 94, 0.8);
+                        color: #ecf0f1; 
+                        border: 2px solid transparent;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        border-radius: 25px;
+                        transition: all 0.3s ease;
+                        backdrop-filter: blur(10px);
+                    }
+                    
+                    input[type="text"]:focus {
+                        outline: none;
+                        border-color: #3498db;
+                        box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+                        transform: scale(1.02);
+                    }
+                    
+                    .send-btn { 
+                        padding: 12px 25px; 
+                        background: linear-gradient(45deg, #27ae60, #229954);
+                        color: white; 
+                        border: none; 
+                        cursor: pointer; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        border-radius: 25px;
+                        transition: all 0.3s ease;
+                        font-weight: bold;
+                    }
+                    
+                    .send-btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 8px 25px rgba(39, 174, 96, 0.4);
+                    }
+                    
+                    .controls { 
+                        display: flex; 
+                        gap: 15px; 
+                        margin-bottom: 20px;
+                        justify-content: center;
+                        animation: slideIn 0.6s ease-out;
+                    }
+                    
+                    .control-btn { 
+                        padding: 12px 25px; 
+                        background: linear-gradient(45deg, #9b59b6, #8e44ad);
+                        color: white; 
+                        border: none; 
+                        cursor: pointer; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        border-radius: 25px;
+                        transition: all 0.3s ease;
+                        font-weight: bold;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    
+                    .control-btn:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 10px 30px rgba(155, 89, 182, 0.4);
+                    }
+                    
+                    .control-btn:active {
+                        transform: translateY(-1px);
+                        animation: pulse 0.3s ease;
+                    }
+                    
+                    .status { 
+                        padding: 15px 25px; 
+                        background: rgba(52, 73, 94, 0.8);
+                        margin-bottom: 20px; 
+                        border-radius: 15px;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .status:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+                    }
                     
                     /* Server Monitor Styles */
                     .monitor-dashboard {
                         display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                        gap: 15px;
-                        margin: 20px 0;
-                        padding: 20px;
-                        background: #34495e;
-                        border-radius: 8px;
-                        border: 2px solid #2c3e50;
+                        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                        gap: 20px;
+                        margin: 25px 0;
+                        padding: 25px;
+                        background: rgba(255, 255, 255, 0.05);
+                        border-radius: 20px;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(15px);
+                        animation: slideIn 0.8s ease-out;
                     }
+                    
                     .monitor-card {
-                        background: #2c3e50;
-                        border-radius: 8px;
-                        padding: 15px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px;
+                        padding: 20px;
                         text-align: center;
-                        border: 1px solid #555;
-                        transition: transform 0.2s ease;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        transition: all 0.4s ease;
+                        position: relative;
+                        overflow: hidden;
+                        backdrop-filter: blur(10px);
                     }
+                    
+                    .monitor-card::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+                        transition: left 0.6s;
+                    }
+                    
+                    .monitor-card:hover::before {
+                        left: 100%;
+                    }
+                    
                     .monitor-card:hover {
-                        transform: translateY(-2px);
+                        transform: translateY(-8px) scale(1.02);
                         border-color: #3498db;
+                        box-shadow: 0 15px 40px rgba(52, 152, 219, 0.3);
                     }
+                    
                     .monitor-title {
                         color: #bdc3c7;
-                        font-size: 12px;
-                        margin-bottom: 8px;
+                        font-size: 13px;
+                        margin-bottom: 12px;
                         text-transform: uppercase;
-                        font-weight: bold;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        font-weight: 600;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        letter-spacing: 1px;
                     }
+                    
                     .monitor-value {
                         color: #ecf0f1;
-                        font-size: 24px;
+                        font-size: 28px;
                         font-weight: bold;
-                        margin-bottom: 5px;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        margin-bottom: 8px;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
                     }
+                    
                     .monitor-unit {
                         color: #95a5a6;
                         font-size: 12px;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        font-weight: 500;
                     }
+                    
                     .monitor-status-online {
                         color: #27ae60;
+                        text-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
                     }
+                    
                     .monitor-status-offline {
                         color: #e74c3c;
+                        text-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
                     }
+                    
                     .monitor-header {
+                        grid-column: 1 / -1;
                         text-align: center;
                         margin-bottom: 15px;
                         color: #ecf0f1;
-                        font-size: 18px;
+                        font-size: 22px;
                         font-weight: bold;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        background: linear-gradient(45deg, #3498db, #e74c3c);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        background-clip: text;
+                    }
+                    
+                    /* Scrollbar Styling */
+                    ::-webkit-scrollbar {
+                        width: 8px;
+                    }
+                    
+                    ::-webkit-scrollbar-track {
+                        background: rgba(52, 73, 94, 0.3);
+                        border-radius: 10px;
+                    }
+                    
+                    ::-webkit-scrollbar-thumb {
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        border-radius: 10px;
+                    }
+                    
+                    ::-webkit-scrollbar-thumb:hover {
+                        background: linear-gradient(45deg, #2980b9, #3498db);
+                    }
+                    
+                    /* Loading Animation */
+                    .loading {
+                        animation: pulse 1.5s infinite;
+                    }
+                    
+                    /* Responsive Design */
+                    @media (max-width: 768px) {
+                        .container {
+                            padding: 10px;
+                        }
+                        
+                        .header h1 {
+                            font-size: 2em;
+                        }
+                        
+                        .nav {
+                            flex-direction: column;
+                            align-items: center;
+                        }
+                        
+                        .controls {
+                            flex-direction: column;
+                            align-items: center;
+                        }
+                        
+                        .input-section {
+                            flex-direction: column;
+                        }
+                        
+                        .monitor-dashboard {
+                            grid-template-columns: 1fr;
+                        }
                     }
                 </style>
             </head>
@@ -1319,14 +1717,14 @@ Created by: Aikar (Empire Minecraft)"""
                     </div>
                     
                     <div class="controls">
-                        <button class="control-btn" onclick="startServer()">Start Server</button>
-                        <button class="control-btn" onclick="stopServer()">Stop Server</button>
-                        <button class="control-btn" onclick="restartServer()">Restart Server</button>
+                        <button class="control-btn" onclick="startServer()">🚀 Start Server</button>
+                        <button class="control-btn" onclick="stopServer()">🛑 Stop Server</button>
+                        <button class="control-btn" onclick="restartServer()">🔄 Restart Server</button>
                     </div>
                     
                     <!-- Server Monitor Dashboard -->
                     <div class="monitor-dashboard">
-                        <div class="monitor-header">📊 Server Monitor</div>
+                        <div class="monitor-header">📊 Server Monitor Dashboard</div>
                         <div class="monitor-card">
                             <div class="monitor-title">Server Status</div>
                             <div class="monitor-value" id="monitor-status">Offline</div>
@@ -1364,7 +1762,8 @@ Created by: Aikar (Empire Minecraft)"""
                     <div class="input-section">
                         <button class="mode-btn" id="mode-btn" onclick="toggleMode()">CMD</button>
                         <input type="text" id="command-input" placeholder="Enter command..." onkeypress="handleKeyPress(event)">
-                        <button class="send-btn" onclick="sendCommand()">Send</button>
+                        <button class="send-btn" onclick="sendCommand()">📤 Send</button>
+                        <button class="control-btn" onclick="clearConsole()" style="background: linear-gradient(45deg, #e74c3c, #c0392b); margin-left: 10px;">🗑️ Clear</button>
                     </div>
                 </div>
                 
@@ -1372,10 +1771,126 @@ Created by: Aikar (Empire Minecraft)"""
                     const socket = io();
                     let commandMode = true;
                     
+                    // Console persistence
+                    const CONSOLE_STORAGE_KEY = 'minecraft_console_history';
+                    const MAX_CONSOLE_LINES = 1000; // Maximum lines to store
+                    
+                    // Load console history on page load
+                    function loadConsoleHistory() {
+                        // First, try to load from backend API
+                        fetch('/api/console/history')
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success && data.history) {
+                                    const consoleElement = document.getElementById('console');
+                                    consoleElement.innerHTML = ''; // Clear existing content
+                                    
+                                    // Load backend history
+                                    data.history.forEach(entry => {
+                                        const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+                                        const formattedMessage = `<span style="color: #888;">[${timestamp}]</span> <span style="color: #00ff00;">${entry.message}</span>`;
+                                        consoleElement.innerHTML += formattedMessage + '<br>';
+                                    });
+                                    
+                                    consoleElement.scrollTop = consoleElement.scrollHeight;
+                                }
+                            })
+                            .catch(error => {
+                                console.log('Could not load backend console history:', error);
+                                // Fallback to localStorage
+                                try {
+                                    const savedConsole = localStorage.getItem(CONSOLE_STORAGE_KEY);
+                                    if (savedConsole) {
+                                        const consoleElement = document.getElementById('console');
+                                        consoleElement.innerHTML = savedConsole;
+                                        consoleElement.scrollTop = consoleElement.scrollHeight;
+                                    }
+                                } catch (e) {
+                                    console.log('Could not load localStorage console history:', e);
+                                }
+                            });
+                    }
+                    
+                    // Save console history to localStorage
+                    function saveConsoleHistory() {
+                        try {
+                            const consoleElement = document.getElementById('console');
+                            let content = consoleElement.innerHTML;
+                            
+                            // Limit the number of lines stored
+                            const lines = content.split('<br>');
+                            if (lines.length > MAX_CONSOLE_LINES) {
+                                content = lines.slice(-MAX_CONSOLE_LINES).join('<br>');
+                                consoleElement.innerHTML = content;
+                            }
+                            
+                            localStorage.setItem(CONSOLE_STORAGE_KEY, content);
+                        } catch (e) {
+                            console.log('Could not save console history:', e);
+                        }
+                    }
+                    
+                    // Add message to console with timestamp
+                    function addConsoleMessage(message, type = 'normal') {
+                        const consoleElement = document.getElementById('console');
+                        const timestamp = new Date().toLocaleTimeString();
+                        
+                        let colorClass = '';
+                        switch (type) {
+                            case 'error':
+                                colorClass = 'style="color: #ff6b6b;"';
+                                break;
+                            case 'warning':
+                                colorClass = 'style="color: #ffa500;"';
+                                break;
+                            case 'info':
+                                colorClass = 'style="color: #74b9ff;"';
+                                break;
+                            case 'success':
+                                colorClass = 'style="color: #00d2d3;"';
+                                break;
+                            default:
+                                colorClass = 'style="color: #00ff00;"';
+                        }
+                        
+                        const formattedMessage = `<span style="color: #888;">[${timestamp}]</span> <span ${colorClass}>${message}</span>`;
+                        consoleElement.innerHTML += formattedMessage + '<br>';
+                        consoleElement.scrollTop = consoleElement.scrollHeight;
+                        
+                        // Save to localStorage
+                        saveConsoleHistory();
+                    }
+                    
+                    // Clear console function
+                    function clearConsole() {
+                        const consoleElement = document.getElementById('console');
+                        consoleElement.innerHTML = '';
+                        localStorage.removeItem(CONSOLE_STORAGE_KEY);
+                        addConsoleMessage('Console cleared', 'info');
+                    }
+                    
                     socket.on('console_output', function(data) {
-                        const console = document.getElementById('console');
-                        console.innerHTML += data.message + '<br>';
-                        console.scrollTop = console.scrollHeight;
+                        // Determine message type based on content
+                        let messageType = 'normal';
+                        const message = data.message.toLowerCase();
+                        
+                        if (message.includes('error') || message.includes('exception') || message.includes('failed')) {
+                            messageType = 'error';
+                        } else if (message.includes('warn')) {
+                            messageType = 'warning';
+                        } else if (message.includes('info') || message.includes('starting') || message.includes('loading')) {
+                            messageType = 'info';
+                        } else if (message.includes('done') || message.includes('complete') || message.includes('success')) {
+                            messageType = 'success';
+                        }
+                        
+                        addConsoleMessage(data.message, messageType);
+                    });
+                    
+                    // Load console history when page loads
+                    document.addEventListener('DOMContentLoaded', function() {
+                        loadConsoleHistory();
+                        addConsoleMessage('Console loaded - history preserved', 'info');
                     });
                     
                     socket.on('server_status', function(data) {
@@ -1386,7 +1901,7 @@ Created by: Aikar (Empire Minecraft)"""
                         updateMonitorDashboard(data);
                     });
                     
-                    // Monitor dashboard update function
+                    // Monitor dashboard update function with animations
                     function updateMonitorDashboard(data) {
                         const statusElement = document.getElementById('monitor-status');
                         const playersElement = document.getElementById('monitor-players');
@@ -1395,36 +1910,46 @@ Created by: Aikar (Empire Minecraft)"""
                         const uptimeElement = document.getElementById('monitor-uptime');
                         const tpsElement = document.getElementById('monitor-tps');
                         
+                        // Add loading animation before update
+                        [statusElement, playersElement, cpuElement, memoryElement, uptimeElement, tpsElement].forEach(el => {
+                            el.classList.add('loading');
+                            setTimeout(() => el.classList.remove('loading'), 300);
+                        });
+                        
                         // Update server status with color coding
-                        if (data.running) {
-                            statusElement.textContent = 'Online';
-                            statusElement.className = 'monitor-value monitor-status-online';
-                        } else {
-                            statusElement.textContent = 'Offline';
-                            statusElement.className = 'monitor-value monitor-status-offline';
-                        }
-                        
-                        // Update players
-                        playersElement.textContent = data.players || '0';
-                        
-                        // Update system metrics (simulated for now)
-                        if (data.running) {
-                            cpuElement.textContent = (Math.random() * 30 + 10).toFixed(1);
-                            memoryElement.textContent = (Math.random() * 500 + 200).toFixed(0);
-                            tpsElement.textContent = (Math.random() * 2 + 19).toFixed(1);
+                        setTimeout(() => {
+                            if (data.running) {
+                                statusElement.textContent = 'Online';
+                                statusElement.className = 'monitor-value monitor-status-online';
+                            } else {
+                                statusElement.textContent = 'Offline';
+                                statusElement.className = 'monitor-value monitor-status-offline';
+                            }
                             
-                            // Update uptime
-                            const uptime = data.uptime || 0;
-                            const hours = Math.floor(uptime / 3600);
-                            const minutes = Math.floor((uptime % 3600) / 60);
-                            const seconds = uptime % 60;
-                            uptimeElement.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                        } else {
-                            cpuElement.textContent = '0';
-                            memoryElement.textContent = '0';
-                            tpsElement.textContent = '0.0';
-                            uptimeElement.textContent = '00:00:00';
-                        }
+                            // Update players with animation
+                            const currentPlayers = data.current_players || data.players || '0';
+                            const maxPlayers = data.max_players || '20';
+                            playersElement.textContent = `${currentPlayers}/${maxPlayers}`;
+                            
+                            // Update system metrics with real data or simulation
+                            if (data.running) {
+                                cpuElement.textContent = (data.cpu_usage || Math.random() * 30 + 10).toFixed(1);
+                                memoryElement.textContent = (data.memory_usage || Math.random() * 500 + 200).toFixed(0);
+                                tpsElement.textContent = (data.tps || Math.random() * 2 + 19).toFixed(1);
+                                
+                                // Update uptime
+                                const uptime = data.uptime || 0;
+                                const hours = Math.floor(uptime / 3600);
+                                const minutes = Math.floor((uptime % 3600) / 60);
+                                const seconds = uptime % 60;
+                                uptimeElement.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                            } else {
+                                cpuElement.textContent = '0';
+                                memoryElement.textContent = '0';
+                                tpsElement.textContent = '0.0';
+                                uptimeElement.textContent = '00:00:00';
+                            }
+                        }, 150);
                     }
                     
                     // Auto-refresh monitor data every 5 seconds
@@ -1436,6 +1961,9 @@ Created by: Aikar (Empire Minecraft)"""
                         commandMode = !commandMode;
                         const btn = document.getElementById('mode-btn');
                         const input = document.getElementById('command-input');
+                        
+                        btn.style.transform = 'scale(0.95)';
+                        setTimeout(() => btn.style.transform = 'scale(1)', 150);
                         
                         if (commandMode) {
                             btn.textContent = 'CMD';
@@ -1452,6 +1980,11 @@ Created by: Aikar (Empire Minecraft)"""
                         const input = document.getElementById('command-input');
                         const command = input.value.trim();
                         if (command) {
+                            // Add send animation
+                            const sendBtn = document.querySelector('.send-btn');
+                            sendBtn.style.transform = 'scale(0.95)';
+                            setTimeout(() => sendBtn.style.transform = 'scale(1)', 150);
+                            
                             socket.emit('send_command', {command: command, mode: commandMode ? 'command' : 'chat'});
                             input.value = '';
                         }
@@ -1465,18 +1998,29 @@ Created by: Aikar (Empire Minecraft)"""
                     
                     function startServer() {
                         socket.emit('server_control', {action: 'start'});
+                        animateButton(event.target);
                     }
                     
                     function stopServer() {
                         socket.emit('server_control', {action: 'stop'});
+                        animateButton(event.target);
                     }
                     
                     function restartServer() {
                         socket.emit('server_control', {action: 'restart'});
+                        animateButton(event.target);
+                    }
+                    
+                    function animateButton(button) {
+                        button.style.transform = 'scale(0.95)';
+                        setTimeout(() => button.style.transform = 'scale(1)', 150);
                     }
                     
                     // Request initial status
                     socket.emit('request_status');
+                    
+                    // Add smooth scroll behavior
+                    document.documentElement.style.scrollBehavior = 'smooth';
                 </script>
             </body>
             </html>
@@ -1489,144 +2033,649 @@ Created by: Aikar (Empire Minecraft)"""
             <head>
                 <title>Cacasians - File Manager</title>
                 <style>
+                    * {
+                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    
                     body { 
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif; 
-                        background: #2c3e50; 
+                        font-family: 'Segoe UI', 'Microsoft Sans Serif', Arial, sans-serif; 
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                         color: #ecf0f1; 
                         margin: 0; 
-                        padding: 20px; 
+                        padding: 20px;
+                        min-height: 100vh;
+                        animation: fadeIn 0.8s ease-out;
                     }
-                    .container { max-width: 1200px; margin: 0 auto; }
-                    .header { text-align: center; margin-bottom: 30px; }
-                    .nav { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
-                    .nav-btn { padding: 10px 20px; background: #34495e; color: #ecf0f1; text-decoration: none; border-radius: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .nav-btn.active { background: #3498db; }
-                    .file-browser { display: flex; gap: 20px; height: 600px; }
-                    .file-list { flex: 1; background: #34495e; border-radius: 5px; overflow: hidden; }
-                    .file-editor { flex: 1; background: #34495e; border-radius: 5px; overflow: hidden; display: none; }
-                    .file-list-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .breadcrumb { background: #2c3e50; padding: 10px 15px; border-bottom: 1px solid #555; font-size: 14px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .file-items { height: calc(100% - 100px); overflow-y: auto; }
-                    .file-item { padding: 10px 15px; border-bottom: 1px solid #555; cursor: pointer; display: flex; align-items: center; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .file-item:hover { background: #3498db; }
-                    .file-icon { margin-right: 10px; width: 20px; }
-                    .file-info { flex: 1; }
-                    .file-size { font-size: 12px; color: #bdc3c7; margin-left: auto; }
-                    .editor-header { background: #2c3e50; padding: 15px; border-bottom: 1px solid #555; display: flex; justify-content: between; align-items: center; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                    .editor-content { height: calc(100% - 60px); }
-                    .editor-textarea { width: 100%; height: 100%; background: #1e1e1e; color: #ecf0f1; border: none; padding: 15px; font-family: 'Microsoft Sans Serif', monospace; resize: none; }
-                    .btn { padding: 8px 16px; background: #3498db; color: white; border: none; cursor: pointer; border-radius: 3px; margin-left: 10px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
+                    
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(20px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    
+                    @keyframes slideIn {
+                        from { transform: translateX(-20px); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                    
+                    @keyframes pulse {
+                        0% { transform: scale(1); }
+                        50% { transform: scale(1.05); }
+                        100% { transform: scale(1); }
+                    }
+                    
+                    @keyframes glow {
+                        0% { box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); }
+                        50% { box-shadow: 0 0 20px rgba(52, 152, 219, 0.8); }
+                        100% { box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); }
+                    }
+                    
+                    .container { 
+                        max-width: 1400px; 
+                        margin: 0 auto; 
+                        animation: slideIn 0.6s ease-out;
+                    }
+                    
+                    .header { 
+                        text-align: center; 
+                        margin-bottom: 30px; 
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border-radius: 15px;
+                        padding: 20px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .header:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                    }
+                    
+                    .header h1 {
+                        font-size: 2.5em;
+                        margin-bottom: 15px;
+                        background: linear-gradient(45deg, #3498db, #e74c3c);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        background-clip: text;
+                        animation: pulse 2s infinite;
+                    }
+                    
+                    .nav { 
+                        display: flex; 
+                        gap: 15px; 
+                        margin-bottom: 20px; 
+                        justify-content: center; 
+                    }
+                    
+                    .nav-btn { 
+                        padding: 12px 25px; 
+                        background: rgba(52, 73, 94, 0.8);
+                        color: #ecf0f1; 
+                        text-decoration: none; 
+                        border-radius: 25px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
+                        border: 2px solid transparent;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    
+                    .nav-btn::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+                        transition: left 0.5s;
+                    }
+                    
+                    .nav-btn:hover::before {
+                        left: 100%;
+                    }
+                    
+                    .nav-btn:hover {
+                        transform: translateY(-3px);
+                        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+                        border-color: #3498db;
+                    }
+                    
+                    .nav-btn.active { 
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        animation: glow 2s infinite;
+                    }
+                    
+                    .file-browser { 
+                        display: flex; 
+                        gap: 20px; 
+                        height: 600px; 
+                        animation: slideIn 0.8s ease-out;
+                    }
+                    
+                    .file-list { 
+                        flex: 1; 
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px; 
+                        overflow: hidden;
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .file-list:hover {
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+                    }
+                    
+                    .file-editor { 
+                        flex: 1; 
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px; 
+                        overflow: hidden; 
+                        display: none;
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .file-editor:hover {
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+                    }
+                    
+                    .file-list-header { 
+                        background: rgba(44, 62, 80, 0.8);
+                        padding: 20px; 
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+                    
+                    .breadcrumb { 
+                        background: rgba(44, 62, 80, 0.6);
+                        padding: 15px 20px; 
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                        font-size: 14px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        backdrop-filter: blur(5px);
+                    }
+                    
+                    .file-items { 
+                        height: calc(100% - 120px); 
+                        overflow-y: auto; 
+                    }
+                    
+                    .file-item { 
+                        padding: 15px 20px; 
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                        cursor: pointer; 
+                        display: flex; 
+                        align-items: center; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    
+                    .file-item::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(52, 152, 219, 0.1), transparent);
+                        transition: left 0.5s;
+                    }
+                    
+                    .file-item:hover::before {
+                        left: 100%;
+                    }
+                    
+                    .file-item:hover { 
+                        background: rgba(52, 152, 219, 0.2);
+                        transform: translateX(5px);
+                        border-left: 3px solid #3498db;
+                    }
+                    
+                    .file-icon { 
+                        margin-right: 15px; 
+                        width: 20px; 
+                        font-size: 18px;
+                    }
+                    
+                    .file-info { 
+                        flex: 1; 
+                        font-weight: 500;
+                    }
+                    
+                    .file-size { 
+                        font-size: 12px; 
+                        color: #bdc3c7; 
+                        margin-left: auto; 
+                        background: rgba(52, 73, 94, 0.6);
+                        padding: 4px 8px;
+                        border-radius: 10px;
+                    }
+                    
+                    .editor-header { 
+                        background: rgba(44, 62, 80, 0.8);
+                        padding: 20px; 
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                        display: flex; 
+                        justify-content: space-between; 
+                        align-items: center; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                    }
+                    
+                    .editor-content { 
+                        height: calc(100% - 80px); 
+                    }
+                    
+                    .editor-textarea { 
+                        width: 100%; 
+                        height: 100%; 
+                        background: rgba(30, 30, 30, 0.95);
+                        color: #ecf0f1; 
+                        border: none; 
+                        padding: 20px; 
+                        font-family: 'Consolas', 'Microsoft Sans Serif', monospace; 
+                        resize: none;
+                        font-size: 14px;
+                        line-height: 1.5;
+                    }
+                    
+                    .editor-textarea:focus {
+                        outline: none;
+                        box-shadow: inset 0 0 20px rgba(52, 152, 219, 0.2);
+                    }
+                    
+                    .btn { 
+                        padding: 10px 20px; 
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        color: white; 
+                        border: none; 
+                        cursor: pointer; 
+                        border-radius: 25px; 
+                        margin-left: 10px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
+                        font-weight: 500;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    
+                    .btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+                    }
+                    
+                    .btn:active {
+                        transform: translateY(0);
+                        animation: pulse 0.3s ease;
+                    }
                     
                     /* File Upload Styles */
                     .upload-area {
-                        border: 2px dashed #555;
-                        border-radius: 8px;
-                        padding: 20px;
-                        margin: 20px 0;
+                        border: 2px dashed rgba(255, 255, 255, 0.3);
+                        border-radius: 15px;
+                        padding: 30px;
+                        margin: 25px 0;
                         text-align: center;
-                        background: #2a2a2a;
-                        transition: all 0.3s ease;
+                        background: rgba(255, 255, 255, 0.05);
+                        transition: all 0.4s ease;
                         cursor: pointer;
+                        backdrop-filter: blur(10px);
+                        position: relative;
+                        overflow: hidden;
                     }
+                    
+                    .upload-area::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(52, 152, 219, 0.1), transparent);
+                        transition: left 0.6s;
+                    }
+                    
+                    .upload-area:hover::before {
+                        left: 100%;
+                    }
+                    
                     .upload-area.dragover {
                         border-color: #3498db;
-                        background: #1e3a5f;
+                        background: rgba(52, 152, 219, 0.1);
+                        transform: scale(1.02);
+                        box-shadow: 0 10px 30px rgba(52, 152, 219, 0.3);
                     }
+                    
                     .upload-area:hover {
-                        border-color: #666;
-                        background: #333;
+                        border-color: rgba(255, 255, 255, 0.5);
+                        background: rgba(255, 255, 255, 0.08);
+                        transform: translateY(-2px);
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
                     }
+                    
                     .upload-text {
-                        color: #bbb;
-                        font-size: 16px;
+                        color: #ecf0f1;
+                        font-size: 18px;
                         margin: 10px 0;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        font-weight: 500;
                     }
+                    
                     .upload-input {
                         display: none;
                     }
+                    
                     .upload-progress {
                         width: 100%;
-                        height: 20px;
-                        background: #333;
-                        border-radius: 10px;
-                        margin: 10px 0;
+                        height: 25px;
+                        background: rgba(52, 73, 94, 0.6);
+                        border-radius: 15px;
+                        margin: 15px 0;
                         overflow: hidden;
                         display: none;
+                        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
                     }
+                    
                     .upload-progress-bar {
                         height: 100%;
                         background: linear-gradient(90deg, #3498db, #2ecc71);
                         width: 0%;
                         transition: width 0.3s ease;
+                        border-radius: 15px;
+                        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.4);
                     }
                     
                     /* Server Monitor Styles */
                     .monitor-dashboard {
                         display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
                         gap: 20px;
-                        margin: 20px 0;
-                        padding: 20px;
-                        background: #2a2a2a;
-                        border-radius: 8px;
+                        margin: 25px 0;
+                        padding: 25px;
+                        background: rgba(255, 255, 255, 0.05);
+                        border-radius: 20px;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(15px);
+                        animation: slideIn 0.8s ease-out;
                     }
+                    
                     .monitor-card {
-                        background: #333;
-                        border-radius: 8px;
-                        padding: 20px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px;
+                        padding: 25px;
                         text-align: center;
-                        border: 1px solid #444;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        transition: all 0.4s ease;
+                        position: relative;
+                        overflow: hidden;
+                        backdrop-filter: blur(10px);
                     }
+                    
+                    .monitor-card::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -100%;
+                        width: 100%;
+                        height: 100%;
+                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+                        transition: left 0.6s;
+                    }
+                    
+                    .monitor-card:hover::before {
+                        left: 100%;
+                    }
+                    
+                    .monitor-card:hover {
+                        transform: translateY(-8px) scale(1.02);
+                        border-color: #3498db;
+                        box-shadow: 0 15px 40px rgba(52, 152, 219, 0.3);
+                    }
+                    
                     .monitor-title {
-                        color: #bbb;
+                        color: #bdc3c7;
                         font-size: 14px;
-                        margin-bottom: 10px;
+                        margin-bottom: 15px;
                         text-transform: uppercase;
                         letter-spacing: 1px;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        font-weight: 600;
                     }
+                    
                     .monitor-value {
-                        color: #fff;
-                        font-size: 24px;
+                        color: #ecf0f1;
+                        font-size: 28px;
                         font-weight: bold;
-                        margin-bottom: 10px;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        margin-bottom: 15px;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
                     }
+                    
                     .monitor-bar {
                         width: 100%;
-                        height: 8px;
-                        background: #444;
-                        border-radius: 4px;
+                        height: 12px;
+                        background: rgba(52, 73, 94, 0.6);
+                        border-radius: 8px;
                         overflow: hidden;
-                        margin-bottom: 5px;
+                        margin-bottom: 10px;
+                        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
                     }
+                    
                     .monitor-bar-fill {
                         height: 100%;
-                        border-radius: 4px;
-                        transition: width 0.5s ease;
+                        border-radius: 8px;
+                        transition: width 0.8s ease;
+                        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
                     }
-                    .monitor-bar-fill.cpu { background: linear-gradient(90deg, #3498db, #e74c3c); }
-                    .monitor-bar-fill.ram { background: linear-gradient(90deg, #2ecc71, #f39c12); }
-                    .monitor-bar-fill.storage { background: linear-gradient(90deg, #9b59b6, #e67e22); }
-                    .monitor-bar-fill.tps { background: linear-gradient(90deg, #1abc9c, #f1c40f); }
+                    
+                    .monitor-bar-fill.cpu { 
+                        background: linear-gradient(90deg, #3498db, #e74c3c);
+                        box-shadow: 0 2px 10px rgba(52, 152, 219, 0.4);
+                    }
+                    
+                    .monitor-bar-fill.ram { 
+                        background: linear-gradient(90deg, #2ecc71, #f39c12);
+                        box-shadow: 0 2px 10px rgba(46, 204, 113, 0.4);
+                    }
+                    
+                    .monitor-bar-fill.storage { 
+                        background: linear-gradient(90deg, #9b59b6, #e67e22);
+                        box-shadow: 0 2px 10px rgba(155, 89, 182, 0.4);
+                    }
+                    
+                    .monitor-bar-fill.tps { 
+                        background: linear-gradient(90deg, #1abc9c, #f1c40f);
+                        box-shadow: 0 2px 10px rgba(26, 188, 156, 0.4);
+                    }
+                    
                     .monitor-status {
-                        color: #bbb;
-                        font-size: 12px;
-                        font-family: 'Microsoft Sans Serif', Arial, sans-serif;
+                        color: #bdc3c7;
+                        font-size: 13px;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        font-weight: 500;
                     }
-                     .btn.save { background: #27ae60; }
-                     .btn.close { background: #e74c3c; }
-                     .btn.download { background: #f39c12; }
-                     .btn.new { background: #9b59b6; }
-                     .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
-                     .modal-content { background-color: #34495e; margin: 15% auto; padding: 20px; border-radius: 5px; width: 400px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                     .modal-close { background: #e74c3c; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 3px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                     .form-group { margin-bottom: 15px; }
-                     .form-group label { display: block; margin-bottom: 5px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                     .form-group input { width: 100%; padding: 8px; background: #2c3e50; color: #ecf0f1; border: 1px solid #555; border-radius: 3px; font-family: 'Microsoft Sans Serif', Arial, sans-serif; }
-                 </style>
+                    
+                    .btn.save { 
+                        background: linear-gradient(45deg, #27ae60, #229954);
+                    }
+                    
+                    .btn.save:hover {
+                        box-shadow: 0 8px 25px rgba(39, 174, 96, 0.4);
+                    }
+                    
+                    .btn.close { 
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                    }
+                    
+                    .btn.close:hover {
+                        box-shadow: 0 8px 25px rgba(231, 76, 60, 0.4);
+                    }
+                    
+                    .btn.download { 
+                        background: linear-gradient(45deg, #f39c12, #e67e22);
+                    }
+                    
+                    .btn.download:hover {
+                        box-shadow: 0 8px 25px rgba(243, 156, 18, 0.4);
+                    }
+                    
+                    .btn.new { 
+                        background: linear-gradient(45deg, #9b59b6, #8e44ad);
+                    }
+                    
+                    .btn.new:hover {
+                        box-shadow: 0 8px 25px rgba(155, 89, 182, 0.4);
+                    }
+                    
+                    .modal { 
+                        display: none; 
+                        position: fixed; 
+                        z-index: 1000; 
+                        left: 0; 
+                        top: 0; 
+                        width: 100%; 
+                        height: 100%; 
+                        background-color: rgba(0,0,0,0.7);
+                        backdrop-filter: blur(5px);
+                        animation: fadeIn 0.3s ease;
+                    }
+                    
+                    .modal-content { 
+                        background: rgba(52, 73, 94, 0.95);
+                        margin: 15% auto; 
+                        padding: 30px; 
+                        border-radius: 15px; 
+                        width: 450px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                        animation: slideIn 0.4s ease;
+                    }
+                    
+                    .modal-header { 
+                        display: flex; 
+                        justify-content: space-between; 
+                        align-items: center; 
+                        margin-bottom: 25px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                    }
+                    
+                    .modal-close { 
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                        color: white; 
+                        border: none; 
+                        padding: 8px 15px; 
+                        cursor: pointer; 
+                        border-radius: 20px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .modal-close:hover {
+                        transform: scale(1.1);
+                        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+                    }
+                    
+                    .form-group { 
+                        margin-bottom: 20px; 
+                    }
+                    
+                    .form-group label { 
+                        display: block; 
+                        margin-bottom: 8px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        font-weight: 500;
+                        color: #ecf0f1;
+                    }
+                    
+                    .form-group input { 
+                        width: 100%; 
+                        padding: 12px 15px; 
+                        background: rgba(44, 62, 80, 0.8);
+                        color: #ecf0f1; 
+                        border: 2px solid transparent;
+                        border-radius: 25px; 
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        transition: all 0.3s ease;
+                        backdrop-filter: blur(5px);
+                    }
+                    
+                    .form-group input:focus {
+                        outline: none;
+                        border-color: #3498db;
+                        box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+                        transform: scale(1.02);
+                    }
+                    
+                    /* Scrollbar Styling */
+                    ::-webkit-scrollbar {
+                        width: 8px;
+                    }
+                    
+                    ::-webkit-scrollbar-track {
+                        background: rgba(52, 73, 94, 0.3);
+                        border-radius: 10px;
+                    }
+                    
+                    ::-webkit-scrollbar-thumb {
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        border-radius: 10px;
+                    }
+                    
+                    ::-webkit-scrollbar-thumb:hover {
+                        background: linear-gradient(45deg, #2980b9, #3498db);
+                    }
+                    
+                    /* Loading Animation */
+                    .loading {
+                        animation: pulse 1.5s infinite;
+                    }
+                    
+                    /* Responsive Design */
+                    @media (max-width: 768px) {
+                        .container {
+                            padding: 10px;
+                        }
+                        
+                        .header h1 {
+                            font-size: 2em;
+                        }
+                        
+                        .nav {
+                            flex-direction: column;
+                            align-items: center;
+                        }
+                        
+                        .file-browser {
+                            flex-direction: column;
+                            height: auto;
+                        }
+                        
+                        .file-list, .file-editor {
+                            height: 400px;
+                        }
+                        
+                        .monitor-dashboard {
+                            grid-template-columns: 1fr;
+                        }
+                        
+                        .modal-content {
+                            width: 90%;
+                            margin: 10% auto;
+                        }
+                    }
+                </style>
             </head>
             <body>
                 <div class="container">
@@ -1679,7 +2728,7 @@ Created by: Aikar (Empire Minecraft)"""
                         <div class="upload-text">
                             📁 Drag & Drop files here or click to browse
                         </div>
-                        <div class="upload-text" style="font-size: 14px; color: #888;">
+                        <div class="upload-text" style="font-size: 14px; color: #bdc3c7;">
                             Supports all file types
                         </div>
                         <input type="file" id="file-input" class="upload-input" multiple>
@@ -1767,8 +2816,17 @@ Created by: Aikar (Empire Minecraft)"""
                                     fileItems.appendChild(parentItem);
                                 }
                                 
+                                // Sort items: folders first, then files
+                                const sortedItems = data.items.sort((a, b) => {
+                                    // Folders first
+                                    if (a.is_directory && !b.is_directory) return -1;
+                                    if (!a.is_directory && b.is_directory) return 1;
+                                    // Then alphabetically within each group
+                                    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                                });
+                                
                                 // Add files and directories
-                                data.items.forEach(item => {
+                                sortedItems.forEach(item => {
                                     const fileItem = document.createElement('div');
                                     fileItem.className = 'file-item';
                                     
@@ -2219,6 +3277,17 @@ Created by: Aikar (Empire Minecraft)"""
                         'success': True,
                         'uploaded': uploaded_count,
                         'message': f'Successfully uploaded {uploaded_count} file(s)'
+                    })
+                except Exception as e:
+                    return jsonify({'error': str(e)}), 500
+            
+            @self.web_server.route('/api/console/history')
+            def get_console_history():
+                """Get console history for web interface"""
+                try:
+                    return jsonify({
+                        'history': self.console_history,
+                        'success': True
                     })
                 except Exception as e:
                     return jsonify({'error': str(e)}), 500
