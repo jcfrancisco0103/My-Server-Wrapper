@@ -3683,6 +3683,14 @@ Created by: Aikar (Empire Minecraft)"""
                         'error': str(e)
                     })
             
+            @self.socketio.on('connect')
+            def handle_connect():
+                self.log_message("[WEB] Client connected to console")
+            
+            @self.socketio.on('disconnect')
+            def handle_disconnect():
+                self.log_message("[WEB] Client disconnected from console")
+            
             @self.socketio.on('send_command')
             def handle_command(data):
                 command = data.get('command', '').strip()
@@ -3789,9 +3797,20 @@ Created by: Aikar (Empire Minecraft)"""
         """Broadcast console output to web clients"""
         if self.web_server_running and hasattr(self, 'socketio'):
             try:
+                # Emit to all connected clients
                 self.socketio.emit('console_output', {'message': message})
-            except:
-                pass  # Silently handle errors
+            except Exception as e:
+                # Log WebSocket errors to help with debugging
+                try:
+                    if hasattr(self, 'console_output'):
+                        timestamp = datetime.now().strftime("%H:%M:%S")
+                        error_msg = f"[{timestamp}] WebSocket broadcast error: {str(e)}\n"
+                        self.console_output.config(state=tk.NORMAL)
+                        self.console_output.insert(tk.END, error_msg)
+                        self.console_output.see(tk.END)
+                        self.console_output.config(state=tk.DISABLED)
+                except:
+                    pass
 
 def main():
     root = tk.Tk()
