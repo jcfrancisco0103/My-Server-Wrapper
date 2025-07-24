@@ -5,7 +5,7 @@
     "memory_max": "2G",
     "server_port": "25565",
     "additional_args": "",
-    "use_aikars_flags": false,
+    "use_aikars_flags": true,
     "auto_start_server": false,
-    "startup_enabled": false
+    "startup_enabled": true
 }

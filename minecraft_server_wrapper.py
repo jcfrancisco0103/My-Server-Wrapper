@@ -10,6 +10,8 @@ import webbrowser
 import sys
 import psutil
 import re
+import hashlib
+import secrets
 # Windows-specific imports (conditional)
 try:
     import winreg
@@ -34,9 +36,9 @@ class MinecraftServerWrapper:
         
         # Set default font to Segoe UI (matching web interface)
         self.default_font = ("Segoe UI", 10)
-        self.title_font = ("Segoe UI", 18, "bold")
-        self.button_font = ("Segoe UI", 10, "bold")
-        self.label_font = ("Segoe UI", 10)
+        self.title_font = ("Gill Sans MT", 18, "bold")
+        self.button_font = ("Microsoft Sans Serif", 10, "bold")
+        self.label_font = ("Gill Sans MT", 10)
         self.console_font = ("Consolas", 10)
         
         # Server process
@@ -50,6 +52,18 @@ class MinecraftServerWrapper:
         self.cpu_values = []
         self.ram_values = []
         self.monitoring_active = False
+        
+        # Player tracking
+        self.current_players = 0
+        self.max_players = 20
+        self.player_list = set()  # Track current players
+        
+        # User authentication system
+        self.users_file = "users.json"
+        self.sessions_file = "sessions.json"
+        self.users = self.load_users()
+        self.active_sessions = {}
+        self.pending_registrations = self.load_pending_registrations()
         
         # Initialize command/chat mode (True = Command mode, False = Chat mode)
         self.command_mode = True
@@ -80,8 +94,8 @@ class MinecraftServerWrapper:
         # Set startup_enabled_var from config
         self.startup_enabled_var.set(self.config.get("startup_enabled", False))
         
-        # Set remote access settings from config
-        self.remote_access_enabled.set(self.config.get("remote_access_enabled", False))
+        # Set remote access settings - automatically enabled
+        self.remote_access_enabled.set(True)  # Always enable web interface
         self.web_port = self.config.get("web_port", 5000)
         
         self.setup_ui()
@@ -101,7 +115,7 @@ class MinecraftServerWrapper:
             "use_aikars_flags": False,
             "auto_start_server": False,
             "startup_enabled": False,
-            "remote_access_enabled": False,
+            "remote_access_enabled": True,  # Always enabled
             "web_port": 5000
         }
         
@@ -312,26 +326,18 @@ class MinecraftServerWrapper:
                                         command=self.toggle_windows_startup)
         startup_checkbox.grid(row=6, column=0, columnspan=2, sticky="w", padx=8, pady=8)
         
-        # Remote access checkbox with modern styling
-        remote_access_checkbox = tk.Checkbutton(config_grid, text="Enable Remote Access (Web Interface)", 
-                                               variable=self.remote_access_enabled, fg="#ecf0f1", bg="#34495e",
-                                               selectcolor="#2c3e50", activebackground="#34495e",
-                                               activeforeground="#ecf0f1", font=self.label_font,
-                                               command=self.toggle_remote_access)
-        remote_access_checkbox.grid(row=7, column=0, columnspan=2, sticky="w", padx=8, pady=8)
-        
         # Web port configuration with modern styling
-        tk.Label(config_grid, text="Web Port:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=8, column=0, sticky="w", padx=8, pady=8)
+        tk.Label(config_grid, text="Web Port:", fg="#ecf0f1", bg="#34495e", font=self.label_font).grid(row=7, column=0, sticky="w", padx=8, pady=8)
         self.web_port_entry = tk.Entry(config_grid, bg="#2c3e50", fg="#ecf0f1", font=self.default_font, width=12,
                                       insertbackground="#ecf0f1", relief=tk.FLAT, bd=5)
         self.web_port_entry.insert(0, str(self.config.get("web_port", 5000)))
-        self.web_port_entry.grid(row=8, column=1, sticky="w", padx=8, pady=8)
+        self.web_port_entry.grid(row=7, column=1, sticky="w", padx=8, pady=8)
         
         # Save config button with modern styling
         save_config_button = tk.Button(config_grid, text="💾 Save Config", command=self.save_config_ui,
                                       bg="#9b59b6", fg="white", font=self.button_font,
                                       relief=tk.FLAT, bd=0, cursor="hand2", height=2)
-        save_config_button.grid(row=9, column=0, columnspan=2, pady=15)
+        save_config_button.grid(row=8, column=0, columnspan=2, pady=15)
         
         # Server properties management with modern styling
         properties_frame = tk.Frame(config_frame, bg="#34495e")
@@ -415,11 +421,22 @@ class MinecraftServerWrapper:
         # Initial console message
         self.log_message("Cacasians initialized. Configure your server and click 'Start Server'.")
         
+        # Automatically start web interface
+        self.root.after(500, self.auto_start_web_interface)
+        
         # Check for auto-start after UI is fully loaded
         self.root.after(1000, self.check_auto_start)
         
         # Start performance monitoring
         self.start_performance_monitoring()
+    
+    def auto_start_web_interface(self):
+        """Automatically start the web interface when the app opens"""
+        try:
+            self.start_web_server()
+            self.log_message("Web interface automatically enabled and started!")
+        except Exception as e:
+            self.log_message(f"Failed to auto-start web interface: {str(e)}")
     
     def browse_jar(self):
         """Browse for server JAR file"""
@@ -442,7 +459,6 @@ class MinecraftServerWrapper:
         self.config["use_aikars_flags"] = self.aikars_flags_var.get()
         self.config["auto_start_server"] = self.auto_start_var.get()
         self.config["startup_enabled"] = self.startup_enabled_var.get()
-        self.config["remote_access_enabled"] = self.remote_access_enabled.get()
         self.config["web_port"] = int(self.web_port_entry.get())
         
         self.save_config()
@@ -652,6 +668,9 @@ class MinecraftServerWrapper:
                     # Parse TPS if monitoring is active
                     if self.monitoring_active:
                         self.parse_tps_from_output(line)
+                    
+                    # Parse player events
+                    self.parse_player_events(line)
                     
                     # Schedule UI update in main thread
                     self.root.after(0, lambda: self.log_message(f"[SERVER] {line.strip()}"))
@@ -1228,6 +1247,191 @@ Created by: Aikar (Empire Minecraft)"""
                     pass
         return None
     
+    def parse_player_events(self, line):
+        """Parse player join/leave events from server output"""
+        try:
+            # Common Minecraft server log patterns for player events
+            # Pattern for player joining: "Player joined the game"
+            join_patterns = [
+                r'(\w+) joined the game',
+                r'(\w+)\[.*?\] logged in',
+                r'Player (\w+) joined',
+                r'(\w+) has joined the server'
+            ]
+            
+            # Pattern for player leaving: "Player left the game"
+            leave_patterns = [
+                r'(\w+) left the game',
+                r'(\w+) lost connection',
+                r'(\w+)\[.*?\] logged out',
+                r'Player (\w+) left',
+                r'(\w+) has left the server'
+            ]
+            
+            # Check for player joining
+            for pattern in join_patterns:
+                match = re.search(pattern, line, re.IGNORECASE)
+                if match:
+                    player_name = match.group(1)
+                    self.player_list.add(player_name)
+                    self.current_players = len(self.player_list)
+                    self.log_message(f"Player {player_name} joined. Current players: {self.current_players}")
+                    return
+            
+            # Check for player leaving
+            for pattern in leave_patterns:
+                match = re.search(pattern, line, re.IGNORECASE)
+                if match:
+                    player_name = match.group(1)
+                    self.player_list.discard(player_name)  # discard won't raise error if not found
+                    self.current_players = len(self.player_list)
+                    self.log_message(f"Player {player_name} left. Current players: {self.current_players}")
+                    return
+                    
+            # Check for server listing current players (e.g., "There are 5/20 players online")
+            list_pattern = r'There are (\d+)/(\d+) players? online'
+            match = re.search(list_pattern, line, re.IGNORECASE)
+            if match:
+                self.current_players = int(match.group(1))
+                self.max_players = int(match.group(2))
+                return
+                
+        except Exception as e:
+            # Don't spam logs with parsing errors
+            pass
+    
+    # User Management Methods
+    def load_users(self):
+        """Load users from JSON file"""
+        try:
+            if os.path.exists(self.users_file):
+                with open(self.users_file, 'r') as f:
+                    return json.load(f)
+            else:
+                # Create default admin user
+                default_users = {
+                    "admin": {
+                        "password_hash": self.hash_password("admin123"),
+                        "role": "admin",
+                        "approved": True,
+                        "created_at": datetime.now().isoformat()
+                    }
+                }
+                self.save_users(default_users)
+                return default_users
+        except Exception as e:
+            self.log_message(f"Error loading users: {str(e)}")
+            return {}
+    
+    def save_users(self, users=None):
+        """Save users to JSON file"""
+        try:
+            if users is None:
+                users = self.users
+            with open(self.users_file, 'w') as f:
+                json.dump(users, f, indent=2)
+        except Exception as e:
+            self.log_message(f"Error saving users: {str(e)}")
+    
+    def load_pending_registrations(self):
+        """Load pending registrations"""
+        try:
+            pending_file = "pending_registrations.json"
+            if os.path.exists(pending_file):
+                with open(pending_file, 'r') as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            self.log_message(f"Error loading pending registrations: {str(e)}")
+            return {}
+    
+    def save_pending_registrations(self):
+        """Save pending registrations"""
+        try:
+            pending_file = "pending_registrations.json"
+            with open(pending_file, 'w') as f:
+                json.dump(self.pending_registrations, f, indent=2)
+        except Exception as e:
+            self.log_message(f"Error saving pending registrations: {str(e)}")
+    
+    def hash_password(self, password):
+        """Hash password using SHA-256"""
+        return hashlib.sha256(password.encode()).hexdigest()
+    
+    def generate_session_token(self):
+        """Generate a secure session token"""
+        return secrets.token_urlsafe(32)
+    
+    def authenticate_user(self, username, password):
+        """Authenticate user credentials"""
+        if username in self.users:
+            user = self.users[username]
+            if user.get("approved", False) and user["password_hash"] == self.hash_password(password):
+                return True
+        return False
+    
+    def create_session(self, username):
+        """Create a new session for authenticated user"""
+        token = self.generate_session_token()
+        self.active_sessions[token] = {
+            "username": username,
+            "created_at": time.time(),
+            "last_activity": time.time()
+        }
+        return token
+    
+    def validate_session(self, token):
+        """Validate session token"""
+        if token in self.active_sessions:
+            session = self.active_sessions[token]
+            # Check if session is not older than 24 hours
+            if time.time() - session["created_at"] < 86400:
+                session["last_activity"] = time.time()
+                return session["username"]
+            else:
+                # Remove expired session
+                del self.active_sessions[token]
+        return None
+    
+    def register_user(self, username, password, email=""):
+        """Register a new user (pending approval)"""
+        if username in self.users or username in self.pending_registrations:
+            return False, "Username already exists"
+        
+        self.pending_registrations[username] = {
+            "password_hash": self.hash_password(password),
+            "email": email,
+            "requested_at": datetime.now().isoformat(),
+            "role": "user"
+        }
+        self.save_pending_registrations()
+        return True, "Registration request submitted for approval"
+    
+    def approve_user(self, username):
+        """Approve a pending user registration"""
+        if username in self.pending_registrations:
+            user_data = self.pending_registrations[username]
+            self.users[username] = {
+                "password_hash": user_data["password_hash"],
+                "email": user_data.get("email", ""),
+                "role": user_data.get("role", "user"),
+                "approved": True,
+                "created_at": datetime.now().isoformat()
+            }
+            del self.pending_registrations[username]
+            self.save_users()
+            self.save_pending_registrations()
+            return True
+        return False
+    
+    def reject_user(self, username):
+        """Reject a pending user registration"""
+        if username in self.pending_registrations:
+            del self.pending_registrations[username]
+            self.save_pending_registrations()
+            return True
+        return False
+    
     def toggle_windows_startup(self):
         """Toggle Windows startup registry entry"""
         if not WINDOWS_PLATFORM:
@@ -1322,42 +1526,307 @@ Created by: Aikar (Empire Minecraft)"""
             return False
     
     def toggle_remote_access(self):
-        """Toggle remote access web server"""
+        """Start remote access web server (always enabled)"""
         try:
-            if self.remote_access_enabled.get():
-                self.start_web_server()
-                self.log_message("Remote access enabled! Web interface starting...")
-            else:
-                self.stop_web_server()
-                self.log_message("Remote access disabled. Web interface stopped.")
+            self.start_web_server()
+            self.log_message("Remote access enabled! Web interface starting...")
             
             # Auto-save the configuration
             self.auto_save_config()
             
         except Exception as e:
-            self.log_message(f"Error managing remote access: {str(e)}")
-            # Revert the checkbox state on error
-            self.remote_access_enabled.set(not self.remote_access_enabled.get())
+            self.log_message(f"Error starting remote access: {str(e)}")
     
     def start_web_server(self):
-        """Start the Flask web server for remote access"""
+        """Start the Flask web server for remote access with authentication"""
         if self.web_server_running:
             return
         
         try:
-            from flask import Flask, render_template_string, request, jsonify
+            from flask import Flask, render_template_string, request, jsonify, redirect, url_for, session
             from flask_socketio import SocketIO, emit
             
             # Create Flask app
             self.web_server = Flask(__name__)
-            self.web_server.config['SECRET_KEY'] = 'minecraft_server_wrapper_secret'
+            self.web_server.config['SECRET_KEY'] = 'minecraft_server_wrapper_secret_auth'
             self.socketio = SocketIO(self.web_server, cors_allowed_origins="*")
             
             # Get port from config
             port = int(self.web_port_entry.get())
             
-            # HTML template for the web interface
-            html_template = '''
+            # Authentication decorator
+            def require_auth(f):
+                def auth_decorated_function(*args, **kwargs):
+                    token = request.cookies.get('session_token')
+                    username = self.validate_session(token) if token else None
+                    if not username:
+                        return redirect(url_for('login'))
+                    return f(*args, **kwargs)
+                auth_decorated_function.__name__ = f.__name__
+                return auth_decorated_function
+            
+            # Admin decorator
+            def require_admin(f):
+                def admin_decorated_function(*args, **kwargs):
+                    token = request.cookies.get('session_token')
+                    username = self.validate_session(token) if token else None
+                    if not username or self.users.get(username, {}).get('role') != 'admin':
+                        return jsonify({'error': 'Admin access required'}), 403
+                    return f(*args, **kwargs)
+                admin_decorated_function.__name__ = f.__name__
+                return admin_decorated_function
+            
+            # Login page template
+            login_template = '''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Cacasians - Login</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    * {
+                        box-sizing: border-box;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    
+                    body {
+                        font-family: 'Segoe UI', 'Microsoft Sans Serif', Arial, sans-serif;
+                        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                        color: #ecf0f1;
+                        min-height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        animation: fadeIn 0.8s ease-out;
+                    }
+                    
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(20px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    
+                    .auth-container {
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border-radius: 20px;
+                        padding: 40px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+                        width: 100%;
+                        max-width: 400px;
+                        animation: slideIn 0.6s ease-out;
+                    }
+                    
+                    @keyframes slideIn {
+                        from { transform: translateY(-20px); opacity: 0; }
+                        to { transform: translateY(0); opacity: 1; }
+                    }
+                    
+                    .auth-header {
+                        text-align: center;
+                        margin-bottom: 30px;
+                    }
+                    
+                    .auth-header h1 {
+                        font-size: 2.5em;
+                        margin-bottom: 10px;
+                        background: linear-gradient(45deg, #3498db, #e74c3c);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        background-clip: text;
+                    }
+                    
+                    .auth-header p {
+                        color: #bdc3c7;
+                        font-size: 1.1em;
+                    }
+                    
+                    .form-group {
+                        margin-bottom: 20px;
+                    }
+                    
+                    .form-group label {
+                        display: block;
+                        margin-bottom: 8px;
+                        font-weight: bold;
+                        color: #ecf0f1;
+                    }
+                    
+                    .form-group input {
+                        width: 100%;
+                        padding: 15px;
+                        border: 2px solid rgba(255, 255, 255, 0.2);
+                        border-radius: 10px;
+                        background: rgba(255, 255, 255, 0.1);
+                        color: #ecf0f1;
+                        font-size: 16px;
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .form-group input:focus {
+                        outline: none;
+                        border-color: #3498db;
+                        box-shadow: 0 0 20px rgba(52, 152, 219, 0.3);
+                        transform: scale(1.02);
+                    }
+                    
+                    .form-group input::placeholder {
+                        color: #bdc3c7;
+                    }
+                    
+                    .btn {
+                        width: 100%;
+                        padding: 15px;
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        color: white;
+                        border: none;
+                        border-radius: 10px;
+                        font-size: 16px;
+                        font-weight: bold;
+                        cursor: pointer;
+                        transition: all 0.3s ease;
+                        margin-bottom: 15px;
+                    }
+                    
+                    .btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 10px 25px rgba(52, 152, 219, 0.4);
+                    }
+                    
+                    .btn:active {
+                        transform: translateY(0);
+                    }
+                    
+                    .btn-secondary {
+                        background: linear-gradient(45deg, #95a5a6, #7f8c8d);
+                    }
+                    
+                    .btn-secondary:hover {
+                        box-shadow: 0 10px 25px rgba(149, 165, 166, 0.4);
+                    }
+                    
+                    .auth-links {
+                        text-align: center;
+                        margin-top: 20px;
+                    }
+                    
+                    .auth-links a {
+                        color: #3498db;
+                        text-decoration: none;
+                        font-weight: bold;
+                        transition: color 0.3s ease;
+                    }
+                    
+                    .auth-links a:hover {
+                        color: #2980b9;
+                    }
+                    
+                    .alert {
+                        padding: 15px;
+                        border-radius: 10px;
+                        margin-bottom: 20px;
+                        font-weight: bold;
+                    }
+                    
+                    .alert-error {
+                        background: rgba(231, 76, 60, 0.2);
+                        border: 1px solid #e74c3c;
+                        color: #e74c3c;
+                    }
+                    
+                    .alert-success {
+                        background: rgba(46, 204, 113, 0.2);
+                        border: 1px solid #2ecc71;
+                        color: #2ecc71;
+                    }
+                    
+                    .toggle-form {
+                        text-align: center;
+                        margin-top: 20px;
+                        padding-top: 20px;
+                        border-top: 1px solid rgba(255, 255, 255, 0.2);
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="auth-container">
+                    <div class="auth-header">
+                        <h1>Cacasians</h1>
+                        <p>Minecraft Server Control Panel</p>
+                    </div>
+                    
+                    {% if message %}
+                    <div class="alert alert-{{ message_type }}">
+                        {{ message }}
+                    </div>
+                    {% endif %}
+                    
+                    <div id="loginForm" style="display: {{ 'block' if not show_register else 'none' }};">
+                        <form method="POST" action="/login">
+                            <div class="form-group">
+                                <label for="username">Username</label>
+                                <input type="text" id="username" name="username" placeholder="Enter your username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Password</label>
+                                <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                            </div>
+                            <button type="submit" class="btn">Login</button>
+                        </form>
+                        
+                        <div class="toggle-form">
+                            <p>Don't have an account? <a href="#" onclick="toggleForm()">Register here</a></p>
+                        </div>
+                    </div>
+                    
+                    <div id="registerForm" style="display: {{ 'block' if show_register else 'none' }};">
+                        <form method="POST" action="/register">
+                            <div class="form-group">
+                                <label for="reg_username">Username</label>
+                                <input type="text" id="reg_username" name="username" placeholder="Choose a username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="reg_email">Email (Optional)</label>
+                                <input type="email" id="reg_email" name="email" placeholder="Enter your email">
+                            </div>
+                            <div class="form-group">
+                                <label for="reg_password">Password</label>
+                                <input type="password" id="reg_password" name="password" placeholder="Choose a password" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="reg_confirm">Confirm Password</label>
+                                <input type="password" id="reg_confirm" name="confirm_password" placeholder="Confirm your password" required>
+                            </div>
+                            <button type="submit" class="btn">Register</button>
+                        </form>
+                        
+                        <div class="toggle-form">
+                            <p>Already have an account? <a href="#" onclick="toggleForm()">Login here</a></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <script>
+                    function toggleForm() {
+                        const loginForm = document.getElementById('loginForm');
+                        const registerForm = document.getElementById('registerForm');
+                        
+                        if (loginForm.style.display === 'none') {
+                            loginForm.style.display = 'block';
+                            registerForm.style.display = 'none';
+                        } else {
+                            loginForm.style.display = 'none';
+                            registerForm.style.display = 'block';
+                        }
+                    }
+                </script>
+            </body>
+            </html>
+            '''
+            
+            # Main interface template (for authenticated users)
+            main_template = '''
             <!DOCTYPE html>
             <html>
             <head>
@@ -1370,14 +1839,21 @@ Created by: Aikar (Empire Minecraft)"""
                         padding: 0;
                     }
                     
+                    html {
+                        scroll-behavior: smooth;
+                    }
+                    
                     body { 
                         font-family: 'Segoe UI', 'Microsoft Sans Serif', Arial, sans-serif; 
                         background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
                         color: #ecf0f1; 
                         margin: 0; 
-                        padding: 20px;
+                        padding: 10px;
                         min-height: 100vh;
                         animation: fadeIn 0.8s ease-out;
+                        overflow-x: auto;
+                        overflow-y: auto;
+                        height: auto;
                     }
                     
                     @keyframes fadeIn {
@@ -1403,20 +1879,28 @@ Created by: Aikar (Empire Minecraft)"""
                     }
                     
                     .container { 
-                        max-width: 1400px; 
+                        max-width: 1600px; 
                         margin: 0 auto; 
                         animation: slideIn 0.6s ease-out;
+                        padding: 0 10px;
+                        width: 100%;
+                        min-height: 100vh;
+                        display: flex;
+                        flex-direction: column;
                     }
                     
                     .header { 
                         text-align: center; 
-                        margin-bottom: 30px; 
+                        margin-bottom: 20px; 
                         background: rgba(255, 255, 255, 0.1);
                         backdrop-filter: blur(10px);
                         border-radius: 15px;
-                        padding: 20px;
+                        padding: 15px;
                         border: 1px solid rgba(255, 255, 255, 0.2);
                         transition: all 0.3s ease;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
                     }
                     
                     .header:hover {
@@ -1425,8 +1909,8 @@ Created by: Aikar (Empire Minecraft)"""
                     }
                     
                     .header h1 {
-                        font-size: 2.5em;
-                        margin-bottom: 15px;
+                        font-size: 2.2em;
+                        margin-bottom: 10px;
                         background: linear-gradient(45deg, #3498db, #e74c3c);
                         -webkit-background-clip: text;
                         -webkit-text-fill-color: transparent;
@@ -1434,15 +1918,37 @@ Created by: Aikar (Empire Minecraft)"""
                         animation: pulse 2s infinite;
                     }
                     
+                    .user-info {
+                        display: flex;
+                        align-items: center;
+                        gap: 15px;
+                    }
+                    
+                    .logout-btn {
+                        padding: 8px 16px;
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                        color: white;
+                        text-decoration: none;
+                        border-radius: 20px;
+                        font-size: 14px;
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .logout-btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+                    }
+                    
                     .nav { 
                         display: flex; 
-                        gap: 15px; 
-                        margin-bottom: 20px; 
+                        gap: 10px; 
+                        margin-bottom: 15px; 
                         justify-content: center; 
+                        flex-wrap: wrap;
                     }
                     
                     .nav-btn { 
-                        padding: 12px 25px; 
+                        padding: 10px 20px; 
                         background: rgba(52, 73, 94, 0.8);
                         color: #ecf0f1; 
                         text-decoration: none; 
@@ -1452,6 +1958,7 @@ Created by: Aikar (Empire Minecraft)"""
                         border: 2px solid transparent;
                         position: relative;
                         overflow: hidden;
+                        font-size: 14px;
                     }
                     
                     .nav-btn::before {
@@ -1483,12 +1990,12 @@ Created by: Aikar (Empire Minecraft)"""
                     .console { 
                         background: rgba(30, 30, 30, 0.95);
                         color: #00ff00; 
-                        padding: 20px; 
-                        height: 400px; 
+                        padding: 15px; 
+                        height: 350px; 
                         overflow-y: scroll; 
                         font-family: 'Consolas', 'Courier New', monospace; 
-                        font-size: 14px;
-                        line-height: 1.4;
+                        font-size: 13px;
+                        line-height: 1.3;
                         border: 2px solid rgba(52, 73, 94, 0.5);
                         border-radius: 15px;
                         backdrop-filter: blur(10px);
@@ -1496,6 +2003,8 @@ Created by: Aikar (Empire Minecraft)"""
                         box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
                         white-space: pre-wrap;
                         word-wrap: break-word;
+                        margin-bottom: 15px;
+                        flex-shrink: 0;
                     }
                     
                     .console:hover {
@@ -1622,100 +2131,101 @@ Created by: Aikar (Empire Minecraft)"""
                     }
                     
                     /* Server Monitor Styles */
-                    .monitor-dashboard {
-                        display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                        gap: 20px;
-                        margin: 25px 0;
-                        padding: 25px;
-                        background: rgba(255, 255, 255, 0.05);
-                        border-radius: 20px;
-                        border: 1px solid rgba(255, 255, 255, 0.1);
-                        backdrop-filter: blur(15px);
-                        animation: slideIn 0.8s ease-out;
-                    }
-                    
-                    .monitor-card {
-                        background: rgba(255, 255, 255, 0.1);
-                        border-radius: 15px;
+                    .monitor-dashboard { 
+                        display: grid; 
+                        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+                        gap: 15px; 
                         padding: 20px;
+                        background: rgba(0, 0, 0, 0.3);
+                        border-radius: 10px;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                    }
+                    
+                    .monitor-card { 
+                        background: rgba(255, 255, 255, 0.05);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 8px;
+                        padding: 15px;
                         text-align: center;
-                        border: 1px solid rgba(255, 255, 255, 0.2);
-                        transition: all 0.4s ease;
-                        position: relative;
-                        overflow: hidden;
-                        backdrop-filter: blur(10px);
                     }
                     
-                    .monitor-card::before {
-                        content: '';
-                        position: absolute;
-                        top: 0;
-                        left: -100%;
-                        width: 100%;
-                        height: 100%;
-                        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-                        transition: left 0.6s;
-                    }
-                    
-                    .monitor-card:hover::before {
-                        left: 100%;
-                    }
-                    
-                    .monitor-card:hover {
-                        transform: translateY(-8px) scale(1.02);
-                        border-color: #3498db;
-                        box-shadow: 0 15px 40px rgba(52, 152, 219, 0.3);
-                    }
-                    
-                    .monitor-title {
-                        color: #bdc3c7;
-                        font-size: 13px;
-                        margin-bottom: 12px;
-                        text-transform: uppercase;
+                    .monitor-title { 
+                        font-size: 0.9em;
+                        color: #888;
+                        margin-bottom: 10px;
                         font-weight: 600;
-                        font-family: 'Segoe UI', Arial, sans-serif;
+                        text-transform: uppercase;
                         letter-spacing: 1px;
                     }
                     
-                    .monitor-value {
-                        color: #ecf0f1;
-                        font-size: 28px;
+                    .monitor-value { 
+                        font-size: 1.8em;
                         font-weight: bold;
-                        margin-bottom: 8px;
-                        font-family: 'Segoe UI', Arial, sans-serif;
-                        transition: all 0.3s ease;
+                        color: #fff;
+                        margin-bottom: 10px;
                     }
                     
-                    .monitor-unit {
-                        color: #95a5a6;
-                        font-size: 12px;
-                        font-family: 'Segoe UI', Arial, sans-serif;
-                        font-weight: 500;
+                    .monitor-unit { 
+                        font-size: 0.8em;
+                        color: #aaa;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
                     }
                     
-                    .monitor-status-online {
-                        color: #27ae60;
-                        text-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
+                    .monitor-progress {
+                        width: 100%;
+                        height: 6px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 3px;
+                        margin: 10px 0;
+                        overflow: hidden;
                     }
                     
-                    .monitor-status-offline {
-                        color: #e74c3c;
-                        text-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
+                    .monitor-progress-bar {
+                        height: 100%;
+                        border-radius: 3px;
+                        transition: width 0.5s ease, background 0.3s ease;
                     }
                     
-                    .monitor-header {
+                    .monitor-progress-bar.low {
+                        background: linear-gradient(90deg, #00b894, #00cec9);
+                    }
+                    
+                    .monitor-progress-bar.medium {
+                        background: linear-gradient(90deg, #fdcb6e, #e17055);
+                    }
+                    
+                    .monitor-progress-bar.high {
+                        background: linear-gradient(90deg, #fd79a8, #e84393);
+                    }
+                    
+                    .monitor-progress-bar.optimal {
+                        background: linear-gradient(90deg, #00b894, #55efc4);
+                    }
+                    
+                    .monitor-subtitle {
+                        font-size: 0.75em;
+                        color: #999;
+                        margin-top: 5px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    
+                    .monitor-status-online { 
+                        color: #00d2d3 !important;
+                    }
+                    
+                    .monitor-status-offline { 
+                        color: #ff6b6b !important;
+                    }
+                    
+                    .monitor-header { 
                         grid-column: 1 / -1;
                         text-align: center;
-                        margin-bottom: 15px;
-                        color: #ecf0f1;
-                        font-size: 22px;
+                        font-size: 1.3em;
                         font-weight: bold;
-                        font-family: 'Segoe UI', Arial, sans-serif;
-                        background: linear-gradient(45deg, #3498db, #e74c3c);
-                        -webkit-background-clip: text;
-                        -webkit-text-fill-color: transparent;
-                        background-clip: text;
+                        margin-bottom: 15px;
+                        color: #fff;
                     }
                     
                     /* Scrollbar Styling */
@@ -1742,32 +2252,287 @@ Created by: Aikar (Empire Minecraft)"""
                         animation: pulse 1.5s infinite;
                     }
                     
+                    /* Admin Panel Styles */
+                    .admin-panel {
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border-radius: 15px;
+                        padding: 20px;
+                        margin-bottom: 20px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                        animation: slideIn 0.6s ease-out;
+                    }
+                    
+                    .admin-header {
+                        text-align: center;
+                        margin-bottom: 25px;
+                        padding-bottom: 15px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+                    }
+                    
+                    .admin-header h2 {
+                        font-size: 1.8em;
+                        margin-bottom: 8px;
+                        background: linear-gradient(45deg, #f39c12, #e67e22);
+                        -webkit-background-clip: text;
+                        -webkit-text-fill-color: transparent;
+                        background-clip: text;
+                    }
+                    
+                    .admin-header p {
+                        color: #bdc3c7;
+                        font-size: 1.1em;
+                    }
+                    
+                    .admin-section {
+                        margin-bottom: 25px;
+                        padding: 15px;
+                        background: rgba(0, 0, 0, 0.2);
+                        border-radius: 10px;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                    }
+                    
+                    .admin-section h3 {
+                        color: #3498db;
+                        margin-bottom: 15px;
+                        font-size: 1.3em;
+                        border-bottom: 2px solid rgba(52, 152, 219, 0.3);
+                        padding-bottom: 8px;
+                    }
+                    
+                    .pending-users {
+                        max-height: 300px;
+                        overflow-y: auto;
+                    }
+                    
+                    .user-card {
+                        background: rgba(255, 255, 255, 0.05);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 8px;
+                        padding: 15px;
+                        margin-bottom: 10px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .user-card:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+                        border-color: #3498db;
+                    }
+                    
+                    .user-info {
+                        flex: 1;
+                    }
+                    
+                    .user-info h4 {
+                        color: #ecf0f1;
+                        margin-bottom: 5px;
+                        font-size: 1.1em;
+                    }
+                    
+                    .user-info p {
+                        color: #bdc3c7;
+                        font-size: 0.9em;
+                        margin: 2px 0;
+                    }
+                    
+                    .user-actions {
+                        display: flex;
+                        gap: 10px;
+                    }
+                    
+                    .admin-btn {
+                        padding: 8px 16px;
+                        border: none;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        font-weight: bold;
+                        transition: all 0.3s ease;
+                        font-size: 14px;
+                    }
+                    
+                    .admin-btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+                    }
+                    
+                    .admin-btn.approve {
+                        background: linear-gradient(45deg, #27ae60, #2ecc71);
+                        color: white;
+                    }
+                    
+                    .admin-btn.approve:hover {
+                        box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4);
+                    }
+                    
+                    .admin-btn.reject {
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                        color: white;
+                    }
+                    
+                    .admin-btn.reject:hover {
+                        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+                    }
+                    
+                    .admin-btn.neutral {
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        color: white;
+                    }
+                    
+                    .admin-btn.neutral:hover {
+                        box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+                    }
+                    
+                    .admin-actions {
+                        display: flex;
+                        gap: 15px;
+                        justify-content: center;
+                        flex-wrap: wrap;
+                    }
+                    
+                    .action-btn {
+                        padding: 8px 16px;
+                        border: none;
+                        border-radius: 20px;
+                        cursor: pointer;
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        font-weight: bold;
+                        transition: all 0.3s ease;
+                        font-size: 14px;
+                    }
+                    
+                    .action-btn:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+                    }
+                    
+                    .action-btn.approve {
+                        background: linear-gradient(45deg, #27ae60, #2ecc71);
+                        color: white;
+                    }
+                    
+                    .action-btn.approve:hover {
+                        box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4);
+                    }
+                    
+                    .action-btn.reject {
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                        color: white;
+                    }
+                    
+                    .action-btn.reject:hover {
+                        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+                    }
+                    
+                    .no-users {
+                        text-align: center;
+                        color: #95a5a6;
+                        font-style: italic;
+                        padding: 20px;
+                    }
+                    
+                    .error {
+                        text-align: center;
+                        color: #e74c3c;
+                        font-style: italic;
+                        padding: 20px;
+                    }
+                    
+                    .loading-text {
+                        text-align: center;
+                        color: #bdc3c7;
+                        font-style: italic;
+                        padding: 20px;
+                    }
+                    
+                    .no-users-text {
+                        text-align: center;
+                        color: #95a5a6;
+                        font-style: italic;
+                        padding: 20px;
+                    }
+                    
                     /* Responsive Design */
+                    @media (max-width: 1200px) {
+                        .monitor-dashboard {
+                            grid-template-columns: repeat(2, 1fr);
+                        }
+                    }
+                    
                     @media (max-width: 768px) {
                         .container {
-                            padding: 10px;
+                            padding: 5px;
                         }
                         
                         .header h1 {
-                            font-size: 2em;
+                            font-size: 1.8em;
+                            margin: 10px 0;
                         }
                         
                         .nav {
                             flex-direction: column;
                             align-items: center;
+                            gap: 5px;
+                        }
+                        
+                        .nav-btn {
+                            padding: 8px 16px;
+                            font-size: 14px;
                         }
                         
                         .controls {
                             flex-direction: column;
                             align-items: center;
+                            gap: 8px;
+                        }
+                        
+                        .control-btn {
+                            width: 100%;
+                            max-width: 300px;
+                            padding: 12px;
                         }
                         
                         .input-section {
                             flex-direction: column;
+                            gap: 10px;
+                        }
+                        
+                        .input-section input {
+                            width: 100%;
                         }
                         
                         .monitor-dashboard {
                             grid-template-columns: 1fr;
+                            gap: 10px;
+                        }
+                        
+                        .console {
+                            height: 300px;
+                            font-size: 12px;
+                        }
+                    }
+                    
+                    @media (max-width: 480px) {
+                        .header h1 {
+                            font-size: 1.5em;
+                        }
+                        
+                        .status {
+                            font-size: 12px;
+                            text-align: center;
+                        }
+                        
+                        .console {
+                            height: 250px;
+                            padding: 10px;
+                        }
+                        
+                        .monitor-card {
+                            padding: 10px;
                         }
                     }
                 </style>
@@ -1776,65 +2541,113 @@ Created by: Aikar (Empire Minecraft)"""
                 <div class="container">
                     <div class="header">
                         <h1>🎮 Cacasians - Remote Server Control</h1>
-                        <div class="nav">
-                            <a href="/" class="nav-btn active">Console</a>
-                            <a href="/files" class="nav-btn">File Manager</a>
-                        </div>
-                        <div class="status">
-                            <strong>Server Status:</strong> <span id="server-status">Checking...</span> |
-                            <strong>Players Online:</strong> <span id="players-online">--</span>
+                        <div class="user-info">
+                            <span>Welcome, {{ username }}!</span>
+                            <a href="/logout" class="logout-btn">Logout</a>
                         </div>
                     </div>
                     
-                    <div class="controls">
-                        <button class="control-btn" id="start-btn" onclick="startServer()">🚀 Start Server</button>
-                        <button class="control-btn" id="stop-btn" onclick="stopServer()">🛑 Stop Server</button>
-                        <button class="control-btn" id="restart-btn" onclick="restartServer()">🔄 Restart Server</button>
-                        <button class="control-btn" id="kill-btn" onclick="killServer()" style="background: linear-gradient(45deg, #8e44ad, #9b59b6);">💀 Kill Server</button>
+                    <div class="nav">
+                        <a href="#" class="nav-btn active" onclick="showConsole()">Console</a>
+                        <a href="/files" class="nav-btn">File Manager</a>
+                        {% if is_admin %}
+                        <a href="#admin-panel" class="nav-btn" onclick="showAdminPanel()">Admin Panel</a>
+                        {% endif %}
                     </div>
                     
-                    <!-- Server Monitor Dashboard -->
-                    <div class="monitor-dashboard">
-                        <div class="monitor-header">📊 Server Monitor Dashboard</div>
-                        <div class="monitor-card">
-                            <div class="monitor-title">Server Status</div>
-                            <div class="monitor-value" id="monitor-status">Offline</div>
-                            <div class="monitor-unit">Status</div>
-                        </div>
-                        <div class="monitor-card">
-                            <div class="monitor-title">Players Online</div>
-                            <div class="monitor-value" id="monitor-players">0</div>
-                            <div class="monitor-unit">Players</div>
-                        </div>
-                        <div class="monitor-card">
-                            <div class="monitor-title">CPU Usage</div>
-                            <div class="monitor-value" id="monitor-cpu">0</div>
-                            <div class="monitor-unit">%</div>
-                        </div>
-                        <div class="monitor-card">
-                            <div class="monitor-title">Memory Usage</div>
-                            <div class="monitor-value" id="monitor-memory">0</div>
-                            <div class="monitor-unit">MB</div>
-                        </div>
-                        <div class="monitor-card">
-                            <div class="monitor-title">Uptime</div>
-                            <div class="monitor-value" id="monitor-uptime">00:00:00</div>
-                            <div class="monitor-unit">H:M:S</div>
-                        </div>
-                        <div class="monitor-card">
-                            <div class="monitor-title">TPS</div>
-                            <div class="monitor-value" id="monitor-tps">20.0</div>
-                            <div class="monitor-unit">Ticks/Sec</div>
-                        </div>
+                    <div class="status">
+                        <strong>Server Status:</strong> <span id="server-status">Checking...</span> |
+                        <strong>Players Online:</strong> <span id="players-online">--</span>
                     </div>
                     
-                    <div class="console" id="console"></div>
+                    {% if is_admin %}
+                    <!-- Admin Panel Section -->
+                    <div id="admin-panel" class="admin-panel" style="display: none;">
+                        <div class="admin-header">
+                            <h2>👑 Admin Panel</h2>
+                            <p>Manage user registrations and system settings</p>
+                        </div>
+                        
+                        <div class="admin-section">
+                            <h3>📋 Pending User Registrations</h3>
+                            <div id="pending-users-list" class="pending-users">
+                                <p class="loading-text">Loading pending users...</p>
+                            </div>
+                        </div>
+                        
+                        <div class="admin-section">
+                            <h3>👥 User Management</h3>
+                            <div class="admin-actions">
+                                <button class="admin-btn" onclick="refreshPendingUsers()">🔄 Refresh Pending Users</button>
+                                <button class="admin-btn" onclick="viewAllUsers()">👥 View All Users</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                     
-                    <div class="input-section">
-                        <button class="mode-btn" id="mode-btn" onclick="toggleMode()">CMD</button>
-                        <input type="text" id="command-input" placeholder="Enter command..." onkeypress="handleKeyPress(event)">
-                        <button class="send-btn" onclick="sendCommand()">📤 Send</button>
-                        <button class="control-btn" onclick="clearConsole()" style="background: linear-gradient(45deg, #e74c3c, #c0392b); margin-left: 10px;">🗑️ Clear</button>
+                    <div class="main-content-wrapper">
+                        <div class="controls">
+                            <button class="control-btn" id="start-btn" onclick="startServer()">🚀 Start Server</button>
+                            <button class="control-btn" id="stop-btn" onclick="stopServer()">🛑 Stop Server</button>
+                            <button class="control-btn" id="restart-btn" onclick="restartServer()">🔄 Restart Server</button>
+                            <button class="control-btn" id="kill-btn" onclick="killServer()" style="background: linear-gradient(45deg, #8e44ad, #9b59b6);">💀 Kill Server</button>
+                        </div>
+                        
+                        <!-- Server Monitor Dashboard -->
+                        <div class="monitor-dashboard">
+                            <div class="monitor-header">📊 Server Monitor Dashboard</div>
+                            <div class="monitor-card">
+                                <div class="monitor-title">CPU Usage</div>
+                                <div class="monitor-value" id="monitor-cpu">0.0%</div>
+                                <div class="monitor-progress">
+                                    <div class="monitor-progress-bar" id="cpu-progress" style="width: 0%;"></div>
+                                </div>
+                                <div class="monitor-subtitle" id="cpu-subtitle">LOW</div>
+                            </div>
+                            <div class="monitor-card">
+                                <div class="monitor-title">RAM Usage</div>
+                                <div class="monitor-value" id="monitor-memory">0MB / 1024MB</div>
+                                <div class="monitor-progress">
+                                    <div class="monitor-progress-bar" id="memory-progress" style="width: 0%;"></div>
+                                </div>
+                                <div class="monitor-subtitle" id="memory-subtitle">0MB / 1024MB</div>
+                            </div>
+                            <div class="monitor-card">
+                                <div class="monitor-title">Storage</div>
+                                <div class="monitor-value" id="monitor-storage">0.0%</div>
+                                <div class="monitor-progress">
+                                    <div class="monitor-progress-bar" id="storage-progress" style="width: 0%;"></div>
+                                </div>
+                                <div class="monitor-subtitle" id="storage-subtitle">0GB / 100GB</div>
+                            </div>
+                            <div class="monitor-card">
+                                <div class="monitor-title">Server TPS</div>
+                                <div class="monitor-value" id="monitor-tps">20.0</div>
+                                <div class="monitor-progress">
+                                    <div class="monitor-progress-bar optimal" id="tps-progress" style="width: 100%;"></div>
+                                </div>
+                                <div class="monitor-subtitle" id="tps-subtitle">Optimal</div>
+                            </div>
+                            <div class="monitor-card">
+                                <div class="monitor-title">Server Status</div>
+                                <div class="monitor-value" id="monitor-status">Offline</div>
+                                <div class="monitor-unit">Status</div>
+                            </div>
+                            <div class="monitor-card">
+                                <div class="monitor-title">Players Online</div>
+                                <div class="monitor-value" id="monitor-players">0/20</div>
+                                <div class="monitor-unit">Players</div>
+                            </div>
+                        </div>
+                        
+                        <div class="console" id="console"></div>
+                        
+                        <div class="input-section">
+                            <button class="mode-btn" id="mode-btn" onclick="toggleMode()">CMD</button>
+                            <input type="text" id="command-input" placeholder="Enter command..." onkeypress="handleKeyPress(event)">
+                            <button class="send-btn" onclick="sendCommand()">📤 Send</button>
+                            <button class="control-btn" onclick="clearConsole()" style="background: linear-gradient(45deg, #e74c3c, #c0392b); margin-left: 10px;">🗑️ Clear</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -1980,55 +2793,140 @@ Created by: Aikar (Empire Minecraft)"""
                         updateMonitorDashboard(data);
                     });
                     
-                    // Monitor dashboard update function with animations
+                    // Monitor dashboard update function
                     function updateMonitorDashboard(data) {
                         const statusElement = document.getElementById('monitor-status');
                         const playersElement = document.getElementById('monitor-players');
                         const cpuElement = document.getElementById('monitor-cpu');
                         const memoryElement = document.getElementById('monitor-memory');
-                        const uptimeElement = document.getElementById('monitor-uptime');
+                        const storageElement = document.getElementById('monitor-storage');
                         const tpsElement = document.getElementById('monitor-tps');
                         
-                        // Add loading animation before update
-                        [statusElement, playersElement, cpuElement, memoryElement, uptimeElement, tpsElement].forEach(el => {
-                            el.classList.add('loading');
-                            setTimeout(() => el.classList.remove('loading'), 300);
-                        });
+                        // Progress bar elements
+                        const cpuProgress = document.getElementById('cpu-progress');
+                        const memoryProgress = document.getElementById('memory-progress');
+                        const storageProgress = document.getElementById('storage-progress');
+                        const tpsProgress = document.getElementById('tps-progress');
                         
-                        // Update server status with color coding
-                        setTimeout(() => {
-                            if (data.running) {
-                                statusElement.textContent = 'Online';
-                                statusElement.className = 'monitor-value monitor-status-online';
+                        // Subtitle elements
+                        const cpuSubtitle = document.getElementById('cpu-subtitle');
+                        const memorySubtitle = document.getElementById('memory-subtitle');
+                        const storageSubtitle = document.getElementById('storage-subtitle');
+                        const tpsSubtitle = document.getElementById('tps-subtitle');
+                        
+                        // Update server status
+                        if (data.running) {
+                            statusElement.textContent = 'Online';
+                            statusElement.className = 'monitor-value monitor-status-online';
+                        } else {
+                            statusElement.textContent = 'Offline';
+                            statusElement.className = 'monitor-value monitor-status-offline';
+                        }
+                        
+                        // Update players
+                        const currentPlayers = parseInt(data.current_players || data.players || '0');
+                        const maxPlayers = parseInt(data.max_players || '20');
+                        playersElement.textContent = `${currentPlayers}/${maxPlayers}`;
+                        
+                        // Update system metrics with real data or simulation
+                        if (data.running) {
+                            // CPU Usage
+                            const cpuUsage = parseFloat(data.cpu_usage || (Math.random() * 30 + 10).toFixed(1));
+                            cpuElement.textContent = `${cpuUsage.toFixed(1)}%`;
+                            cpuProgress.style.width = `${cpuUsage}%`;
+                            
+                            // CPU color and subtitle
+                            cpuProgress.className = 'monitor-progress-bar';
+                            if (cpuUsage < 30) {
+                                cpuProgress.classList.add('low');
+                                cpuSubtitle.textContent = 'LOW';
+                            } else if (cpuUsage < 60) {
+                                cpuProgress.classList.add('medium');
+                                cpuSubtitle.textContent = 'MEDIUM';
                             } else {
-                                statusElement.textContent = 'Offline';
-                                statusElement.className = 'monitor-value monitor-status-offline';
+                                cpuProgress.classList.add('high');
+                                cpuSubtitle.textContent = 'HIGH';
                             }
                             
-                            // Update players with animation
-                            const currentPlayers = data.current_players || data.players || '0';
-                            const maxPlayers = data.max_players || '20';
-                            playersElement.textContent = `${currentPlayers}/${maxPlayers}`;
+                            // Memory Usage
+                            const memoryUsage = parseFloat(data.memory_usage || (Math.random() * 500 + 200).toFixed(0));
+                            const maxMemory = 1024; // 1GB in MB
+                            const memoryPercent = (memoryUsage / maxMemory) * 100;
+                            memoryElement.textContent = `${memoryPercent.toFixed(1)}%`;
+                            memoryProgress.style.width = `${memoryPercent}%`;
+                            memorySubtitle.textContent = `${memoryUsage.toFixed(0)}MB / ${maxMemory}MB`;
                             
-                            // Update system metrics with real data or simulation
-                            if (data.running) {
-                                cpuElement.textContent = (data.cpu_usage || Math.random() * 30 + 10).toFixed(1);
-                                memoryElement.textContent = (data.memory_usage || Math.random() * 500 + 200).toFixed(0);
-                                tpsElement.textContent = (data.tps || Math.random() * 2 + 19).toFixed(1);
-                                
-                                // Update uptime
-                                const uptime = data.uptime || 0;
-                                const hours = Math.floor(uptime / 3600);
-                                const minutes = Math.floor((uptime % 3600) / 60);
-                                const seconds = uptime % 60;
-                                uptimeElement.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                            // Memory color
+                            memoryProgress.className = 'monitor-progress-bar';
+                            if (memoryPercent < 50) {
+                                memoryProgress.classList.add('low');
+                            } else if (memoryPercent < 80) {
+                                memoryProgress.classList.add('medium');
                             } else {
-                                cpuElement.textContent = '0';
-                                memoryElement.textContent = '0';
-                                tpsElement.textContent = '0.0';
-                                uptimeElement.textContent = '00:00:00';
+                                memoryProgress.classList.add('high');
                             }
-                        }, 150);
+                            
+                            // Storage Usage (simulated)
+                            const storageUsage = parseFloat(data.storage_usage || (Math.random() * 30 + 20).toFixed(1));
+                            const maxStorage = 100; // 100GB
+                            const storageUsed = (storageUsage / 100) * maxStorage;
+                            storageElement.textContent = `${storageUsage.toFixed(1)}%`;
+                            storageProgress.style.width = `${storageUsage}%`;
+                            storageSubtitle.textContent = `${storageUsed.toFixed(1)}GB / ${maxStorage}GB`;
+                            
+                            // Storage color
+                            storageProgress.className = 'monitor-progress-bar';
+                            if (storageUsage < 50) {
+                                storageProgress.classList.add('low');
+                            } else if (storageUsage < 80) {
+                                storageProgress.classList.add('medium');
+                            } else {
+                                storageProgress.classList.add('high');
+                            }
+                            
+                            // TPS
+                            const tpsValue = parseFloat(data.tps || (Math.random() * 2 + 19).toFixed(1));
+                            tpsElement.textContent = tpsValue.toFixed(1);
+                            const tpsPercent = (tpsValue / 20) * 100;
+                            tpsProgress.style.width = `${Math.min(tpsPercent, 100)}%`;
+                            
+                            // TPS color and subtitle
+                            tpsProgress.className = 'monitor-progress-bar';
+                            if (tpsValue >= 19) {
+                                tpsProgress.classList.add('optimal');
+                                tpsSubtitle.textContent = 'Optimal';
+                            } else if (tpsValue >= 15) {
+                                tpsProgress.classList.add('medium');
+                                tpsSubtitle.textContent = 'Good';
+                            } else {
+                                tpsProgress.classList.add('high');
+                                tpsSubtitle.textContent = 'Poor';
+                            }
+                        } else {
+                            // Server offline - reset all values
+                            cpuElement.textContent = '0.0%';
+                            memoryElement.textContent = '0.0%';
+                            storageElement.textContent = '0.0%';
+                            tpsElement.textContent = '0.0';
+                            
+                            // Reset progress bars
+                            cpuProgress.style.width = '0%';
+                            memoryProgress.style.width = '0%';
+                            storageProgress.style.width = '0%';
+                            tpsProgress.style.width = '0%';
+                            
+                            // Reset subtitles
+                            cpuSubtitle.textContent = 'OFFLINE';
+                            memorySubtitle.textContent = '0MB / 1024MB';
+                            storageSubtitle.textContent = '0GB / 100GB';
+                            tpsSubtitle.textContent = 'Offline';
+                            
+                            // Reset colors
+                            cpuProgress.className = 'monitor-progress-bar';
+                            memoryProgress.className = 'monitor-progress-bar';
+                            storageProgress.className = 'monitor-progress-bar';
+                            tpsProgress.className = 'monitor-progress-bar';
+                        }
                     }
                     
                     // Auto-refresh monitor data every 5 seconds
@@ -2148,6 +3046,125 @@ Created by: Aikar (Empire Minecraft)"""
                     
                     // Add smooth scroll behavior
                     document.documentElement.style.scrollBehavior = 'smooth';
+                    
+                    // Admin Panel Functions
+                    function showAdminPanel() {
+                        // Hide main content wrapper (console and controls)
+                        document.querySelector('.main-content-wrapper').style.display = 'none';
+                        // Show admin panel
+                        document.getElementById('admin-panel').style.display = 'block';
+                        
+                        // Update nav buttons
+                        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+                        document.querySelector('[onclick="showAdminPanel()"]').classList.add('active');
+                        
+                        // Load pending users when panel is shown
+                        loadPendingUsers();
+                    }
+                    
+                    function showConsole() {
+                        // Show main content wrapper (console and controls)
+                        document.querySelector('.main-content-wrapper').style.display = 'block';
+                        // Hide admin panel
+                        document.getElementById('admin-panel').style.display = 'none';
+                        
+                        // Update nav buttons
+                        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+                        document.querySelector('[onclick="showConsole()"]').classList.add('active');
+                    }
+                    
+                    function refreshPendingUsers() {
+                        loadPendingUsers();
+                    }
+                    
+                    function loadPendingUsers() {
+                        fetch('/api/admin/pending-users')
+                            .then(response => response.json())
+                            .then(data => {
+                                const container = document.getElementById('pending-users-list');
+                                container.innerHTML = '';
+                                
+                                if (data.users && data.users.length > 0) {
+                                    data.users.forEach(user => {
+                                        const userCard = document.createElement('div');
+                                        userCard.className = 'user-card';
+                                        userCard.innerHTML = `
+                                            <div class="user-info">
+                                                <strong>${user.username}</strong>
+                                                <div>Email: ${user.email || 'Not provided'}</div>
+                                                <div>Requested: ${new Date(user.requested_at).toLocaleString()}</div>
+                                            </div>
+                                            <div class="user-actions">
+                                                <button class="action-btn approve" onclick="approveUser('${user.username}')">Approve</button>
+                                                <button class="action-btn reject" onclick="rejectUser('${user.username}')">Reject</button>
+                                            </div>
+                                        `;
+                                        container.appendChild(userCard);
+                                    });
+                                } else {
+                                    container.innerHTML = '<div class="no-users">No pending registrations</div>';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error loading pending users:', error);
+                                document.getElementById('pending-users-list').innerHTML = '<div class="error">Error loading pending users</div>';
+                            });
+                    }
+                    
+                    function approveUser(username) {
+                        if (confirm(`Approve user "${username}"?`)) {
+                            fetch('/api/admin/approve-user', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ username: username })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    alert(`User "${username}" approved successfully!`);
+                                    loadPendingUsers(); // Refresh the list
+                                } else {
+                                    alert(`Error approving user: ${data.error}`);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error approving user:', error);
+                                alert('Error approving user');
+                            });
+                        }
+                    }
+                    
+                    function rejectUser(username) {
+                        if (confirm(`Reject user "${username}"? This action cannot be undone.`)) {
+                            fetch('/api/admin/reject-user', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ username: username })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    alert(`User "${username}" rejected successfully!`);
+                                    loadPendingUsers(); // Refresh the list
+                                } else {
+                                    alert(`Error rejecting user: ${data.error}`);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error rejecting user:', error);
+                                alert('Error rejecting user');
+                            });
+                        }
+                    }
+                    
+                    function viewAllUsers() {
+                        // This could be expanded to show all registered users
+                        alert('View All Users functionality can be implemented here');
+                    }
                 </script>
             </body>
             </html>
@@ -2542,10 +3559,10 @@ Created by: Aikar (Empire Minecraft)"""
                     /* Server Monitor Styles */
                     .monitor-dashboard {
                         display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                        gap: 20px;
-                        margin: 25px 0;
-                        padding: 25px;
+                        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                        gap: 15px;
+                        margin: 20px 0;
+                        padding: 20px;
                         background: rgba(255, 255, 255, 0.05);
                         border-radius: 20px;
                         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -2556,7 +3573,7 @@ Created by: Aikar (Empire Minecraft)"""
                     .monitor-card {
                         background: rgba(255, 255, 255, 0.1);
                         border-radius: 15px;
-                        padding: 25px;
+                        padding: 20px;
                         text-align: center;
                         border: 1px solid rgba(255, 255, 255, 0.2);
                         transition: all 0.4s ease;
@@ -3378,15 +4395,135 @@ Created by: Aikar (Empire Minecraft)"""
             </html>
             '''
             
+            # Load user data
+            self.load_users()
+            self.load_pending_registrations()
+            
+            # Authentication routes
+            @self.web_server.route('/login', methods=['GET', 'POST'])
+            def login():
+                if request.method == 'POST':
+                    username = request.form.get('username', '').strip()
+                    password = request.form.get('password', '')
+                    
+                    if self.authenticate_user(username, password):
+                        token = self.create_session(username)
+                        response = redirect('/')
+                        response.set_cookie('session_token', token, max_age=86400)  # 24 hours
+                        return response
+                    else:
+                        return render_template_string(login_template, 
+                                                    message="Invalid username or password", 
+                                                    message_type="error")
+                
+                return render_template_string(login_template)
+            
+            @self.web_server.route('/register', methods=['POST'])
+            def register():
+                username = request.form.get('username', '').strip()
+                email = request.form.get('email', '').strip()
+                password = request.form.get('password', '')
+                confirm_password = request.form.get('confirm_password', '')
+                
+                # Validation
+                if not username or not password:
+                    return render_template_string(login_template, 
+                                                message="Username and password are required", 
+                                                message_type="error", 
+                                                show_register=True)
+                
+                if password != confirm_password:
+                    return render_template_string(login_template, 
+                                                message="Passwords do not match", 
+                                                message_type="error", 
+                                                show_register=True)
+                
+                if username in self.users or username in self.pending_registrations:
+                    return render_template_string(login_template, 
+                                                message="Username already exists", 
+                                                message_type="error", 
+                                                show_register=True)
+                
+                # Register user (pending approval)
+                success = self.register_user(username, password, email)
+                if success:
+                    return render_template_string(login_template, 
+                                                message="Registration submitted! Please wait for admin approval.", 
+                                                message_type="success")
+                else:
+                    return render_template_string(login_template, 
+                                                message="Registration failed. Please try again.", 
+                                                message_type="error", 
+                                                show_register=True)
+            
+            @self.web_server.route('/logout')
+            def logout():
+                token = request.cookies.get('session_token')
+                if token and token in self.active_sessions:
+                    del self.active_sessions[token]
+                response = redirect('/login')
+                response.set_cookie('session_token', '', expires=0)
+                return response
+            
+            # Main routes (require authentication)
             @self.web_server.route('/')
+            @require_auth
             def index():
-                return html_template
+                token = request.cookies.get('session_token')
+                username = self.validate_session(token)
+                is_admin = self.users.get(username, {}).get('role') == 'admin'
+                return render_template_string(main_template, username=username, is_admin=is_admin)
             
             @self.web_server.route('/files')
+            @require_auth
             def file_manager():
                 return file_manager_template
             
+            # Admin API routes
+            @self.web_server.route('/api/admin/pending-users')
+            @require_admin
+            def get_pending_users():
+                users_list = []
+                for username, user_data in self.pending_registrations.items():
+                    users_list.append({
+                        'username': username,
+                        'email': user_data.get('email', ''),
+                        'requested_at': user_data.get('requested_at', '')
+                    })
+                return jsonify({'users': users_list})
+            
+            @self.web_server.route('/api/admin/approve-user', methods=['POST'])
+            @require_admin
+            def approve_user_route():
+                data = request.get_json()
+                username = data.get('username')
+                
+                if not username:
+                    return jsonify({'success': False, 'error': 'Username is required'})
+                
+                success = self.approve_user(username)
+                if success:
+                    return jsonify({'success': True})
+                else:
+                    return jsonify({'success': False, 'error': 'User not found in pending registrations'})
+            
+            @self.web_server.route('/api/admin/reject-user', methods=['POST'])
+            @require_admin
+            def reject_user_route():
+                data = request.get_json()
+                username = data.get('username')
+                
+                if not username:
+                    return jsonify({'success': False, 'error': 'Username is required'})
+                
+                success = self.reject_user(username)
+                if success:
+                    return jsonify({'success': True})
+                else:
+                    return jsonify({'success': False, 'error': 'User not found in pending registrations'})
+            
             @self.web_server.route('/api/files')
+            @require_auth
             def list_files():
                 path = request.args.get('path', '.')
                 try:
@@ -3427,8 +4564,9 @@ Created by: Aikar (Empire Minecraft)"""
                 except Exception as e:
                     return jsonify({'error': str(e)}), 500
             
-            @self.web_server.route('/api/file/<path:filepath>')
-            def get_file(filepath):
+            @self.web_server.route('/api/file/<path:filepath>', methods=['GET', 'POST', 'DELETE'])
+            @require_auth
+            def handle_file(filepath):
                 try:
                     # Set the server directory as the base path
                     server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
@@ -3438,79 +4576,61 @@ Created by: Aikar (Empire Minecraft)"""
                     if not abs_path.startswith(server_base_dir):
                         return jsonify({'error': 'Access denied'}), 403
                     
-                    if not os.path.exists(abs_path) or os.path.isdir(abs_path):
-                        return jsonify({'error': 'File not found'}), 404
+                    if request.method == 'GET':
+                        # Get file content
+                        if not os.path.exists(abs_path) or os.path.isdir(abs_path):
+                            return jsonify({'error': 'File not found'}), 404
+                        
+                        # Check if file is text-based
+                        try:
+                            with open(abs_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                            return jsonify({
+                                'content': content,
+                                'is_text': True,
+                                'size': len(content)
+                            })
+                        except UnicodeDecodeError:
+                            return jsonify({
+                                'error': 'Binary file - cannot display',
+                                'is_text': False,
+                                'size': os.path.getsize(abs_path)
+                            })
                     
-                    # Check if file is text-based
-                    try:
-                        with open(abs_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        return jsonify({
-                            'content': content,
-                            'is_text': True,
-                            'size': len(content)
-                        })
-                    except UnicodeDecodeError:
-                        return jsonify({
-                            'error': 'Binary file - cannot display',
-                            'is_text': False,
-                            'size': os.path.getsize(abs_path)
-                        })
-                except Exception as e:
-                    return jsonify({'error': str(e)}), 500
-            
-            @self.web_server.route('/api/file/<path:filepath>', methods=['POST'])
-            def save_file(filepath):
-                try:
-                    # Set the server directory as the base path
-                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
-                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
+                    elif request.method == 'POST':
+                        # Save file content
+                        data = request.get_json()
+                        content = data.get('content', '')
+                        
+                        # Create directory if it doesn't exist
+                        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                        
+                        with open(abs_path, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                        
+                        self.log_message(f"[WEB] File saved: {filepath}")
+                        return jsonify({'success': True})
                     
-                    # Security check
-                    if not abs_path.startswith(server_base_dir):
-                        return jsonify({'error': 'Access denied'}), 403
-                    
-                    data = request.get_json()
-                    content = data.get('content', '')
-                    
-                    # Create directory if it doesn't exist
-                    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-                    
-                    with open(abs_path, 'w', encoding='utf-8') as f:
-                        f.write(content)
-                    
-                    self.log_message(f"[WEB] File saved: {filepath}")
-                    return jsonify({'success': True})
-                except Exception as e:
-                    return jsonify({'error': str(e)}), 500
-            
-            @self.web_server.route('/api/file/<path:filepath>', methods=['DELETE'])
-            def delete_file(filepath):
-                try:
-                    # Set the server directory as the base path
-                    server_base_dir = os.path.abspath('C:/Users/MersYeon/Desktop/Cacasians/')
-                    abs_path = os.path.abspath(os.path.join(server_base_dir, filepath))
-                    
-                    # Security check
-                    if not abs_path.startswith(server_base_dir):
-                        return jsonify({'error': 'Access denied'}), 403
-                    
-                    if not os.path.exists(abs_path):
-                        return jsonify({'error': 'File not found'}), 404
-                    
-                    if os.path.isdir(abs_path):
-                        import shutil
-                        shutil.rmtree(abs_path)
-                        self.log_message(f"[WEB] Directory deleted: {filepath}")
-                    else:
-                        os.remove(abs_path)
-                        self.log_message(f"[WEB] File deleted: {filepath}")
-                    
-                    return jsonify({'success': True})
+                    elif request.method == 'DELETE':
+                        # Delete file or directory
+                        if not os.path.exists(abs_path):
+                            return jsonify({'error': 'File not found'}), 404
+                        
+                        if os.path.isdir(abs_path):
+                            import shutil
+                            shutil.rmtree(abs_path)
+                            self.log_message(f"[WEB] Directory deleted: {filepath}")
+                        else:
+                            os.remove(abs_path)
+                            self.log_message(f"[WEB] File deleted: {filepath}")
+                        
+                        return jsonify({'success': True})
+                        
                 except Exception as e:
                     return jsonify({'error': str(e)}), 500
             
             @self.web_server.route('/api/file/<path:filepath>/rename', methods=['POST'])
+            @require_auth
             def rename_file(filepath):
                 try:
                     # Set the server directory as the base path
@@ -3549,6 +4669,7 @@ Created by: Aikar (Empire Minecraft)"""
                     return jsonify({'error': str(e)}), 500
             
             @self.web_server.route('/download/<path:filepath>')
+            @require_auth
             def download_file(filepath):
                 try:
                     # Set the server directory as the base path
@@ -3571,6 +4692,7 @@ Created by: Aikar (Empire Minecraft)"""
                     return str(e), 500
             
             @self.web_server.route('/api/upload', methods=['POST'])
+            @require_auth
             def upload_files():
                 try:
                     # Set the server directory as the base path
@@ -3612,6 +4734,7 @@ Created by: Aikar (Empire Minecraft)"""
                     return jsonify({'error': str(e)}), 500
             
             @self.web_server.route('/api/console/history')
+            @require_auth
             def get_console_history():
                 """Get console history for web interface"""
                 try:
@@ -3623,6 +4746,7 @@ Created by: Aikar (Empire Minecraft)"""
                     return jsonify({'error': str(e)}), 500
             
             @self.web_server.route('/api/monitor')
+            @require_auth
             def get_monitor_data():
                 try:
                     import psutil
@@ -3649,16 +4773,13 @@ Created by: Aikar (Empire Minecraft)"""
                         storage_used = 0
                         storage_total = 0
                     
-                    # Get TPS (placeholder - would need to parse from server output)
-                    # For now, simulate TPS based on CPU usage
-                    if cpu_percent < 30:
-                        tps = 20.0
-                    elif cpu_percent < 60:
-                        tps = 19.5 - (cpu_percent - 30) * 0.5 / 30
-                    elif cpu_percent < 80:
-                        tps = 19.0 - (cpu_percent - 60) * 4 / 20
+                    # Get TPS from parsed values
+                    if self.tps_values and len(self.tps_values) > 0:
+                        # Use average of recent TPS values
+                        tps = round(sum(self.tps_values) / len(self.tps_values), 1)
                     else:
-                        tps = max(15.0 - (cpu_percent - 80) * 10 / 20, 5.0)
+                        # Default to 20.0 if no TPS data available
+                        tps = 20.0
                     
                     return jsonify({
                         'cpu': cpu_percent,
@@ -3683,16 +4804,53 @@ Created by: Aikar (Empire Minecraft)"""
                         'error': str(e)
                     })
             
+            # Socket.IO authentication helper
+            def authenticate_socketio():
+                """Authenticate Socket.IO connection using session token"""
+                from flask import request as flask_request
+                try:
+                    # Get session token from cookies
+                    token = flask_request.cookies.get('session_token')
+                    if not token:
+                        return False
+                    
+                    # Validate session
+                    username = self.validate_session(token)
+                    return username is not None
+                except:
+                    return False
+            
             @self.socketio.on('connect')
             def handle_connect():
+                if not authenticate_socketio():
+                    return False  # Reject connection
                 pass
             
             @self.socketio.on('disconnect')
             def handle_disconnect():
                 pass
             
+            @self.socketio.on('command')
+            def handle_command(command):
+                if not authenticate_socketio():
+                    return
+                
+                if command and command.strip():
+                    self.send_server_command(command.strip())
+            
+            @self.socketio.on('chat')
+            def handle_chat(message):
+                if not authenticate_socketio():
+                    return
+                
+                if message and message.strip():
+                    self.send_server_command(f"say [WEB] {message.strip()}")
+            
             @self.socketio.on('send_command')
-            def handle_command(data):
+            def handle_command_legacy(data):
+                if not authenticate_socketio():
+                    return
+                
                 command = data.get('command', '').strip()
                 mode = data.get('mode', 'command')
                 
@@ -3700,10 +4858,13 @@ Created by: Aikar (Empire Minecraft)"""
                     if mode == 'command':
                         self.send_server_command(command)
                     else:  # chat mode
-                        self.send_server_command(f"say [ADMIN] {command}")
+                        self.send_server_command(f"say [WEB] {command}")
             
             @self.socketio.on('server_control')
             def handle_server_control(data):
+                if not authenticate_socketio():
+                    return
+                
                 action = data.get('action')
                 if action == 'start':
                     self.start_server()
@@ -3716,6 +4877,9 @@ Created by: Aikar (Empire Minecraft)"""
             
             @self.socketio.on('request_status')
             def handle_status_request():
+                if not authenticate_socketio():
+                    return
+                
                 # Calculate uptime
                 uptime = 0
                 if self.server_running and self.server_start_time:
@@ -3724,11 +4888,16 @@ Created by: Aikar (Empire Minecraft)"""
                 # Get current monitoring data
                 cpu_usage = getattr(self, 'cpu_usage', 0)
                 memory_usage = getattr(self, 'memory_usage', 0)
-                tps = getattr(self, 'current_tps', 20.0)
+                
+                # Get TPS from parsed values
+                if self.tps_values and len(self.tps_values) > 0:
+                    tps = round(sum(self.tps_values) / len(self.tps_values), 1)
+                else:
+                    tps = 20.0
                 
                 # Get player count
                 current_players = self.get_player_count()
-                max_players = 20  # Default, could be read from server.properties
+                max_players = self.max_players  # Use tracked max players
                 
                 emit('server_status', {
                     'running': self.server_running,
@@ -3788,10 +4957,8 @@ Created by: Aikar (Empire Minecraft)"""
                 self.log_message(f"Error sending command: {str(e)}")
     
     def get_player_count(self):
-        """Get current player count (placeholder - would need to parse from server output)"""
-        # This would need to be implemented by parsing server output
-        # For now, return a placeholder
-        return "--"
+        """Get current player count"""
+        return self.current_players
     
     def broadcast_console_output(self, message):
         """Broadcast console output to web clients"""

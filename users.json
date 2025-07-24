@@ -1,0 +1,15 @@
+{
+  "admin": {
+    "password_hash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "role": "admin",
+    "approved": true,
+    "created_at": "2025-07-24T18:33:03.495017"
+  },
+  "mersyeon": {
+    "password_hash": "2c331b1ff5479bcc9c513f42de46a89cf0486725f87c1c495d01c4011de3b0ce",
+    "email": "",
+    "role": "user",
+    "approved": true,
+    "created_at": "2025-07-24T20:56:27.538517"
+  }
+}
