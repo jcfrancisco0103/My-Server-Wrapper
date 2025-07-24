@@ -3685,11 +3685,11 @@ Created by: Aikar (Empire Minecraft)"""
             
             @self.socketio.on('connect')
             def handle_connect():
-                self.log_message("[WEB] Client connected to console")
+                pass
             
             @self.socketio.on('disconnect')
             def handle_disconnect():
-                self.log_message("[WEB] Client disconnected from console")
+                pass
             
             @self.socketio.on('send_command')
             def handle_command(data):
