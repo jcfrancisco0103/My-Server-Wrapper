@@ -12,10 +12,6 @@ import psutil
 import re
 import hashlib
 import secrets
-import zipfile
-import shutil
-from pathlib import Path
-import requests
 # Windows-specific imports (conditional)
 try:
     import winreg
@@ -23,10 +19,9 @@ try:
 except ImportError:
     WINDOWS_PLATFORM = False
     winreg = None
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for, send_file
+from flask import Flask, render_template, request, jsonify, send_from_directory, send_file
 from flask_socketio import SocketIO, emit
 from werkzeug.serving import make_server
-from werkzeug.utils import secure_filename
 
 class MinecraftServerWrapper:
     def __init__(self, root):
@@ -44,10 +39,6 @@ class MinecraftServerWrapper:
         self.label_font = ("Segoe UI", 10)
         self.console_font = ("Consolas", 10)
         
-        # Configuration - Load first
-        self.config_file = "server_config.json"
-        self.load_config()
-        
         # Server process
         self.server_process = None
         self.server_running = False
@@ -58,25 +49,6 @@ class MinecraftServerWrapper:
         self.current_players = 0
         self.max_players = 20
         self.player_list = set()
-        
-        # Server monitoring variables
-        self.cpu_usage = 0
-        self.memory_usage = 0
-        self.tps = 20.0
-        self.monitoring_enabled = True
-        self.performance_thread = None
-        
-        # Plugins management
-        self.plugins_dir = os.path.join(os.path.dirname(self.config.get("server_jar", "")), "plugins")
-        self.installed_plugins = []
-        
-        # File management
-        self.file_manager_root = self.config.get("file_manager_root", r"C:\Users\MersYeon\Desktop\Cacasians")
-        self.allowed_extensions = {'.txt', '.yml', '.yaml', '.json', '.properties', '.jar', '.zip'}
-        
-        # Performance optimization
-        self.use_aikars_flags = tk.BooleanVar()
-        self.optimization_enabled = tk.BooleanVar()
         
         # User authentication system
         self.users_file = "users.json"
@@ -93,7 +65,11 @@ class MinecraftServerWrapper:
         self.web_server_thread = None
         self.web_server_running = False
         self.remote_access_enabled = tk.BooleanVar()
-        self.web_port = self.config.get("web_port", 5000)
+        self.web_port = 5000
+        
+        # Configuration
+        self.config_file = "server_config.json"
+        self.load_config()
         
         # Console history storage
         self.console_history = []
@@ -112,6 +88,7 @@ class MinecraftServerWrapper:
         
         # Set remote access settings
         self.remote_access_enabled.set(True)
+        self.web_port = self.config.get("web_port", 5000)
         
         self.setup_ui()
         
@@ -130,13 +107,11 @@ class MinecraftServerWrapper:
             "memory_max": "2G",
             "server_port": "25565",
             "additional_args": "",
-            "use_aikars_flags": True,
-            "optimization_enabled": True,
+            "use_aikars_flags": False,
             "auto_start_server": False,
             "startup_enabled": False,
             "remote_access_enabled": True,
-            "web_port": 5000,
-            "file_manager_root": r"C:\Users\MersYeon\Desktop\Cacasians"
+            "web_port": 5000
         }
         
         try:
@@ -362,56 +337,14 @@ class MinecraftServerWrapper:
         
         # Build command
         java_path = self.config.get("java_path", "java")
-        command = [java_path]
-        
-        # Add Aikar's flags if enabled
-        if self.config.get("use_aikars_flags", True):
-            # Aikar's flags for better garbage collection
-            aikars_flags = [
-                f"-Xms{min_memory}",
-                f"-Xmx{max_memory}",
-                "-XX:+UseG1GC",
-                "-XX:+ParallelRefProcEnabled",
-                "-XX:MaxGCPauseMillis=200",
-                "-XX:+UnlockExperimentalVMOptions",
-                "-XX:+DisableExplicitGC",
-                "-XX:+AlwaysPreTouch",
-                "-XX:G1NewSizePercent=30",
-                "-XX:G1MaxNewSizePercent=40",
-                "-XX:G1HeapRegionSize=8M",
-                "-XX:G1ReservePercent=20",
-                "-XX:G1HeapWastePercent=5",
-                "-XX:G1MixedGCCountTarget=4",
-                "-XX:InitiatingHeapOccupancyPercent=15",
-                "-XX:G1MixedGCLiveThresholdPercent=90",
-                "-XX:G1RSetUpdatingPauseTimePercent=5",
-                "-XX:SurvivorRatio=32",
-                "-XX:+PerfDisableSharedMem",
-                "-XX:MaxTenuringThreshold=1",
-                "-Dusing.aikars.flags=https://mcflags.emc.gs",
-                "-Daikars.new.flags=true"
-            ]
-            command.extend(aikars_flags)
-        else:
-            # Standard memory flags
-            command.extend([f"-Xms{min_memory}", f"-Xmx{max_memory}"])
-        
-        # Add optimization flags if enabled
-        if self.config.get("optimization_enabled", True):
-            optimization_flags = [
-                "-XX:+UseStringDeduplication",
-                "-XX:+UseCompressedOops",
-                "-XX:+OptimizeStringConcat"
-            ]
-            command.extend(optimization_flags)
-        
-        # Add JAR and nogui
-        command.extend(["-jar", jar_file, "nogui"])
-        
-        # Add additional arguments if any
-        additional_args = self.config.get("additional_args", "").strip()
-        if additional_args:
-            command.extend(additional_args.split())
+        command = [
+            java_path,
+            f"-Xms{min_memory}",
+            f"-Xmx{max_memory}",
+            "-jar",
+            jar_file,
+            "nogui"
+        ]
         
         try:
             # Change to server directory
@@ -437,14 +370,9 @@ class MinecraftServerWrapper:
             self.output_thread = threading.Thread(target=self.monitor_output, daemon=True)
             self.output_thread.start()
             
-            # Start performance monitoring thread
-            self.performance_thread = threading.Thread(target=self.monitor_server_performance, daemon=True)
-            self.performance_thread.start()
-            
             # Update UI
             self.update_button_states()
             self.log_message("Server starting...")
-            self.log_message(f"Using command: {' '.join(command)}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start server: {str(e)}")
@@ -548,97 +476,11 @@ class MinecraftServerWrapper:
             self.player_list.discard(player)
             self.current_players = len(self.player_list)
             return
-        
-        # Parse TPS from server output
-        tps_match = re.search(r"TPS from last 1m, 5m, 15m: ([\d.]+)", line)
-        if tps_match:
-            self.server_tps = float(tps_match.group(1))
-            return
-    
-    def monitor_server_performance(self):
-        """Monitor server performance metrics"""
-        while self.server_running and self.monitoring_enabled:
-            try:
-                if self.server_process:
-                    # Get process info
-                    process = psutil.Process(self.server_process.pid)
-                    
-                    # CPU usage
-                    self.server_cpu_usage = process.cpu_percent()
-                    
-                    # Memory usage in MB
-                    memory_info = process.memory_info()
-                    self.server_memory_usage = memory_info.rss / 1024 / 1024
-                    
-                time.sleep(5)  # Update every 5 seconds
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                break
-            except Exception as e:
-                print(f"Error monitoring performance: {e}")
-                break
-    
-    def get_plugins_list(self):
-        """Get list of installed plugins"""
-        plugins = []
-        if os.path.exists(self.plugins_dir):
-            for file in os.listdir(self.plugins_dir):
-                if file.endswith('.jar'):
-                    plugin_path = os.path.join(self.plugins_dir, file)
-                    plugin_info = {
-                        'name': file[:-4],  # Remove .jar extension
-                        'filename': file,
-                        'size': os.path.getsize(plugin_path),
-                        'modified': os.path.getmtime(plugin_path)
-                    }
-                    plugins.append(plugin_info)
-        return plugins
-    
-    def get_file_list(self, path=""):
-        """Get file list for file manager"""
-        try:
-            full_path = os.path.join(self.file_manager_root, path) if path else self.file_manager_root
-            full_path = os.path.normpath(full_path)
-            
-            # Security check - ensure path is within allowed directory
-            if not full_path.startswith(self.file_manager_root):
-                return []
-            
-            if not os.path.exists(full_path):
-                return []
-            
-            files = []
-            for item in os.listdir(full_path):
-                item_path = os.path.join(full_path, item)
-                relative_path = os.path.relpath(item_path, self.file_manager_root)
-                
-                file_info = {
-                    'name': item,
-                    'path': relative_path.replace('\\', '/'),
-                    'is_directory': os.path.isdir(item_path),
-                    'size': os.path.getsize(item_path) if os.path.isfile(item_path) else 0,
-                    'modified': os.path.getmtime(item_path)
-                }
-                files.append(file_info)
-            
-            return sorted(files, key=lambda x: (not x['is_directory'], x['name'].lower()))
-        except Exception as e:
-            print(f"Error getting file list: {e}")
-            return []
     
     def log_message(self, message):
         """Log message to console"""
         timestamp = time.strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}"
-        
-        # Add to console history for web interface
-        self.console_history.append({
-            'timestamp': timestamp,
-            'message': message
-        })
-        
-        # Keep only last 1000 messages
-        if len(self.console_history) > 1000:
-            self.console_history = self.console_history[-1000:]
         
         def update_console():
             self.console_output.insert(tk.END, formatted_message + "\\n")
@@ -715,438 +557,516 @@ class MinecraftServerWrapper:
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Cacasians Minecraft Server Wrapper</title>
+                <title>Minecraft Server Wrapper</title>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { 
-                        font-family: 'Segoe UI', Arial, sans-serif; 
-                        background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460); 
-                        color: white; 
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+                    
+                    body {
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
                         min-height: 100vh;
-                        overflow-x: hidden;
                     }
-                    .navbar {
-                        background: rgba(0,0,0,0.3);
-                        padding: 1rem 2rem;
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
+                    
+                    .container {
+                        max-width: 1200px;
+                        margin: 0 auto;
+                        padding: 20px;
+                    }
+                    
+                    .header {
+                        text-align: center;
+                        margin-bottom: 30px;
+                        padding: 20px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px;
                         backdrop-filter: blur(10px);
-                        border-bottom: 1px solid rgba(255,255,255,0.1);
                     }
-                    .navbar h1 {
-                        font-size: 1.8rem;
-                        background: linear-gradient(45deg, #00d4ff, #ff6b6b);
-                        -webkit-background-clip: text;
-                        -webkit-text-fill-color: transparent;
-                        background-clip: text;
+                    
+                    .header h1 {
+                        font-size: 2.5em;
+                        margin-bottom: 10px;
+                        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
                     }
+                    
                     .nav-tabs {
                         display: flex;
-                        gap: 1rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 10px;
+                        padding: 5px;
+                        margin-bottom: 20px;
+                        backdrop-filter: blur(10px);
                     }
+                    
                     .nav-tab {
-                        padding: 0.5rem 1rem;
-                        background: rgba(255,255,255,0.1);
+                        flex: 1;
+                        padding: 12px 20px;
+                        background: transparent;
                         border: none;
-                        border-radius: 8px;
                         color: white;
                         cursor: pointer;
+                        border-radius: 8px;
                         transition: all 0.3s ease;
+                        font-size: 16px;
+                        font-weight: 500;
                     }
-                    .nav-tab:hover, .nav-tab.active {
-                        background: rgba(0,212,255,0.3);
-                        transform: translateY(-2px);
+                    
+                    .nav-tab:hover {
+                        background: rgba(255, 255, 255, 0.2);
                     }
-                    .container {
-                        max-width: 1400px;
-                        margin: 0 auto;
-                        padding: 2rem;
+                    
+                    .nav-tab.active {
+                        background: rgba(255, 255, 255, 0.3);
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
                     }
+                    
                     .tab-content {
                         display: none;
-                        animation: fadeIn 0.3s ease;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 15px;
+                        padding: 25px;
+                        backdrop-filter: blur(10px);
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
                     }
+                    
                     .tab-content.active {
                         display: block;
                     }
-                    @keyframes fadeIn {
-                        from { opacity: 0; transform: translateY(20px); }
-                        to { opacity: 1; transform: translateY(0); }
-                    }
-                    .grid {
+                    
+                    .dashboard-grid {
                         display: grid;
-                        gap: 2rem;
-                        margin-bottom: 2rem;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 20px;
+                        margin-bottom: 20px;
                     }
-                    .grid-2 { grid-template-columns: 1fr 1fr; }
-                    .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+                    
                     .card {
-                        background: rgba(255,255,255,0.1);
-                        border-radius: 15px;
-                        padding: 1.5rem;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 12px;
+                        padding: 20px;
                         backdrop-filter: blur(10px);
-                        border: 1px solid rgba(255,255,255,0.1);
-                        transition: transform 0.3s ease;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
                     }
-                    .card:hover {
-                        transform: translateY(-5px);
-                    }
+                    
                     .card h3 {
-                        margin-bottom: 1rem;
-                        color: #00d4ff;
-                        font-size: 1.2rem;
+                        margin-bottom: 15px;
+                        color: #fff;
+                        font-size: 1.3em;
                     }
+                    
                     .status-card {
                         text-align: center;
-                        padding: 2rem;
                     }
+                    
                     .status-indicator {
+                        display: inline-block;
                         width: 20px;
                         height: 20px;
                         border-radius: 50%;
-                        display: inline-block;
                         margin-right: 10px;
+                        animation: pulse 2s infinite;
                     }
-                    .status-running { background: #27ae60; }
-                    .status-stopped { background: #e74c3c; }
-                    .controls {
+                    
+                    .status-running {
+                        background: #27ae60;
+                    }
+                    
+                    .status-stopped {
+                        background: #e74c3c;
+                    }
+                    
+                    @keyframes pulse {
+                        0% { opacity: 1; }
+                        50% { opacity: 0.5; }
+                        100% { opacity: 1; }
+                    }
+                    
+                    .control-buttons {
                         display: flex;
-                        gap: 1rem;
+                        gap: 10px;
+                        flex-wrap: wrap;
                         justify-content: center;
-                        margin-top: 1rem;
+                        margin-top: 15px;
                     }
-                    button {
-                        padding: 0.8rem 1.5rem;
+                    
+                    .btn {
+                        padding: 12px 24px;
                         border: none;
                         border-radius: 8px;
                         cursor: pointer;
-                        font-weight: bold;
+                        font-size: 14px;
+                        font-weight: 600;
                         transition: all 0.3s ease;
-                        font-size: 0.9rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        min-width: 120px;
                     }
-                    button:hover {
+                    
+                    .btn:hover {
                         transform: translateY(-2px);
                         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
                     }
-                    .btn-start { background: linear-gradient(45deg, #27ae60, #2ecc71); color: white; }
-                    .btn-stop { background: linear-gradient(45deg, #e74c3c, #c0392b); color: white; }
-                    .btn-restart { background: linear-gradient(45deg, #f39c12, #e67e22); color: white; }
-                    .btn-primary { background: linear-gradient(45deg, #3498db, #2980b9); color: white; }
-                    .btn-danger { background: linear-gradient(45deg, #e74c3c, #c0392b); color: white; }
-                    .btn-success { background: linear-gradient(45deg, #27ae60, #2ecc71); color: white; }
-                    #console {
-                        background: #000;
+                    
+                    .btn-start {
+                        background: linear-gradient(45deg, #27ae60, #2ecc71);
+                        color: white;
+                    }
+                    
+                    .btn-stop {
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                        color: white;
+                    }
+                    
+                    .btn-restart {
+                        background: linear-gradient(45deg, #f39c12, #e67e22);
+                        color: white;
+                    }
+                    
+                    .btn-kill {
+                        background: linear-gradient(45deg, #8e44ad, #9b59b6);
+                        color: white;
+                    }
+                    
+                    .console-section {
+                        grid-column: 1 / -1;
+                    }
+                    
+                    .console {
+                        background: #1a1a1a;
                         color: #00ff00;
-                        padding: 1rem;
-                        height: 400px;
+                        padding: 15px;
+                        height: 300px;
                         overflow-y: auto;
-                        font-family: 'Consolas', monospace;
+                        font-family: 'Courier New', monospace;
                         border-radius: 8px;
-                        border: 1px solid rgba(255,255,255,0.2);
-                        font-size: 0.9rem;
+                        border: 1px solid #333;
+                        font-size: 14px;
                         line-height: 1.4;
                     }
-                    .command-section {
+                    
+                    .console::-webkit-scrollbar {
+                        width: 8px;
+                    }
+                    
+                    .console::-webkit-scrollbar-track {
+                        background: #2a2a2a;
+                    }
+                    
+                    .console::-webkit-scrollbar-thumb {
+                        background: #555;
+                        border-radius: 4px;
+                    }
+                    
+                    .command-input {
                         display: flex;
-                        gap: 0.5rem;
-                        margin-top: 1rem;
+                        gap: 10px;
+                        margin-top: 15px;
                     }
-                    input[type="text"], input[type="file"] {
+                    
+                    .command-input input {
                         flex: 1;
-                        padding: 0.8rem;
-                        border: 1px solid rgba(255,255,255,0.3);
+                        padding: 12px;
+                        border: 1px solid rgba(255, 255, 255, 0.3);
                         border-radius: 8px;
-                        background: rgba(255,255,255,0.1);
+                        background: rgba(255, 255, 255, 0.1);
                         color: white;
-                        font-size: 0.9rem;
+                        font-size: 14px;
                     }
-                    input[type="text"]:focus, input[type="file"]:focus {
-                        outline: none;
-                        border-color: #00d4ff;
-                        box-shadow: 0 0 10px rgba(0,212,255,0.3);
+                    
+                    .command-input input::placeholder {
+                        color: rgba(255, 255, 255, 0.6);
                     }
-                    .metric {
-                        text-align: center;
-                        padding: 1rem;
+                    
+                    .command-input button {
+                        padding: 12px 20px;
+                        background: linear-gradient(45deg, #3498db, #2980b9);
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                        font-weight: 600;
+                        transition: all 0.3s ease;
                     }
-                    .metric-value {
-                        font-size: 2rem;
-                        font-weight: bold;
-                        color: #00d4ff;
-                        display: block;
-                    }
-                    .metric-label {
-                        font-size: 0.9rem;
-                        opacity: 0.8;
-                        margin-top: 0.5rem;
-                    }
-                    .file-list {
+                    
+                    .file-manager {
                         max-height: 500px;
                         overflow-y: auto;
-                        border: 1px solid rgba(255,255,255,0.2);
-                        border-radius: 8px;
                     }
+                    
+                    .file-path {
+                        background: rgba(255, 255, 255, 0.1);
+                        padding: 10px;
+                        border-radius: 8px;
+                        margin-bottom: 15px;
+                        font-family: monospace;
+                        word-break: break-all;
+                    }
+                    
+                    .file-list {
+                        list-style: none;
+                    }
+                    
                     .file-item {
                         display: flex;
-                        justify-content: space-between;
                         align-items: center;
-                        padding: 0.8rem;
-                        border-bottom: 1px solid rgba(255,255,255,0.1);
-                        transition: background 0.2s ease;
+                        padding: 10px;
+                        border-radius: 8px;
+                        margin-bottom: 5px;
+                        background: rgba(255, 255, 255, 0.05);
+                        transition: all 0.3s ease;
+                        cursor: pointer;
                     }
+                    
                     .file-item:hover {
-                        background: rgba(255,255,255,0.1);
+                        background: rgba(255, 255, 255, 0.1);
+                        transform: translateX(5px);
                     }
-                    .file-info {
-                        display: flex;
-                        align-items: center;
-                        gap: 0.5rem;
-                    }
+                    
                     .file-icon {
-                        width: 20px;
-                        height: 20px;
-                        display: inline-block;
+                        margin-right: 10px;
+                        font-size: 18px;
                     }
+                    
+                    .file-info {
+                        flex: 1;
+                    }
+                    
+                    .file-name {
+                        font-weight: 500;
+                        margin-bottom: 2px;
+                    }
+                    
+                    .file-details {
+                        font-size: 12px;
+                        color: rgba(255, 255, 255, 0.7);
+                    }
+                    
                     .file-actions {
                         display: flex;
-                        gap: 0.5rem;
+                        gap: 5px;
                     }
-                    .file-actions button {
-                        padding: 0.3rem 0.6rem;
-                        font-size: 0.8rem;
+                    
+                    .file-action {
+                        padding: 5px 10px;
+                        background: rgba(255, 255, 255, 0.2);
+                        border: none;
+                        border-radius: 4px;
+                        color: white;
+                        cursor: pointer;
+                        font-size: 12px;
+                        transition: all 0.3s ease;
                     }
-                    .plugin-item {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        padding: 1rem;
-                        background: rgba(255,255,255,0.05);
-                        border-radius: 8px;
-                        margin-bottom: 0.5rem;
+                    
+                    .file-action:hover {
+                        background: rgba(255, 255, 255, 0.3);
                     }
-                    .plugin-info h4 {
-                        color: #00d4ff;
-                        margin-bottom: 0.3rem;
-                    }
-                    .plugin-info small {
-                        opacity: 0.7;
-                    }
+                    
                     .notification {
                         position: fixed;
                         top: 20px;
                         right: 20px;
-                        padding: 1rem 1.5rem;
-                        border-radius: 8px;
+                        padding: 15px 20px;
+                        background: rgba(0, 0, 0, 0.9);
                         color: white;
-                        font-weight: bold;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
                         z-index: 1000;
-                        animation: slideIn 0.3s ease;
-                        max-width: 300px;
+                        transform: translateX(400px);
+                        transition: transform 0.3s ease;
                     }
-                    .notification.success { background: #27ae60; }
-                    .notification.error { background: #e74c3c; }
-                    .notification.info { background: #3498db; }
-                    @keyframes slideIn {
-                        from { transform: translateX(100%); opacity: 0; }
-                        to { transform: translateX(0); opacity: 1; }
+                    
+                    .notification.show {
+                        transform: translateX(0);
                     }
+                    
+                    .notification.success {
+                        border-left: 4px solid #27ae60;
+                    }
+                    
+                    .notification.error {
+                        border-left: 4px solid #e74c3c;
+                    }
+                    
                     @media (max-width: 768px) {
-                        .grid-2, .grid-3 { grid-template-columns: 1fr; }
-                        .navbar { flex-direction: column; gap: 1rem; }
-                        .controls { flex-direction: column; }
-                        .container { padding: 1rem; }
+                        .dashboard-grid {
+                            grid-template-columns: 1fr;
+                        }
+                        
+                        .nav-tabs {
+                            flex-direction: column;
+                        }
+                        
+                        .control-buttons {
+                            flex-direction: column;
+                        }
+                        
+                        .btn {
+                            width: 100%;
+                        }
                     }
                 </style>
             </head>
             <body>
-                <nav class="navbar">
-                    <h1>🎮 Cacasians Minecraft Server</h1>
-                    <div class="nav-tabs">
-                        <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
-                        <button class="nav-tab" onclick="showTab('monitor')">Server Monitor</button>
-                        <button class="nav-tab" onclick="showTab('plugins')">Plugins</button>
-                        <button class="nav-tab" onclick="showTab('files')">File Manager</button>
-                        <button class="nav-tab" onclick="showTab('console')">Console</button>
-                    </div>
-                </nav>
-
                 <div class="container">
-                    <!-- Dashboard Tab -->
+                    <div class="header">
+                        <h1>🎮 Minecraft Server Wrapper</h1>
+                        <p>Advanced Server Management Dashboard</p>
+                    </div>
+                    
+                    <div class="nav-tabs">
+                        <button class="nav-tab active" onclick="switchTab('dashboard')">Dashboard & Console</button>
+                        <button class="nav-tab" onclick="switchTab('monitor')">Server Monitor</button>
+                        <button class="nav-tab" onclick="switchTab('plugins')">Plugins</button>
+                        <button class="nav-tab" onclick="switchTab('files')">File Manager</button>
+                    </div>
+                    
                     <div id="dashboard" class="tab-content active">
-                        <div class="grid grid-2">
+                        <div class="dashboard-grid">
                             <div class="card status-card">
-                                <h3>Server Status</h3>
+                                <h3>🔧 Server Status</h3>
                                 <div id="status">
                                     <span class="status-indicator status-stopped"></span>
-                                    <span id="status-text">Stopped</span>
+                                    <span id="status-text">Server Stopped</span>
                                 </div>
-                                <div class="controls">
-                                    <button class="btn-start" onclick="startServer()">▶ Start</button>
-                                    <button class="btn-stop" onclick="stopServer()">⏹ Stop</button>
-                                    <button class="btn-restart" onclick="restartServer()">🔄 Restart</button>
+                                <div id="player-info" style="margin-top: 10px; font-size: 14px;">
+                                    Players: <span id="player-count">0</span>/<span id="max-players">20</span>
                                 </div>
                             </div>
+                            
                             <div class="card">
-                                <h3>Quick Stats</h3>
-                                <div class="grid grid-3">
-                                    <div class="metric">
-                                        <span class="metric-value" id="player-count">0</span>
-                                        <div class="metric-label">Players Online</div>
-                                    </div>
-                                    <div class="metric">
-                                        <span class="metric-value" id="tps-value">20.0</span>
-                                        <div class="metric-label">TPS</div>
-                                    </div>
-                                    <div class="metric">
-                                        <span class="metric-value" id="uptime">0m</span>
-                                        <div class="metric-label">Uptime</div>
-                                    </div>
+                                <h3>⚡ Server Controls</h3>
+                                <div class="control-buttons">
+                                    <button class="btn btn-start" onclick="startServer()">Start</button>
+                                    <button class="btn btn-stop" onclick="stopServer()">Stop</button>
+                                    <button class="btn btn-restart" onclick="restartServer()">Restart</button>
+                                    <button class="btn btn-kill" onclick="killServer()">Kill Server</button>
+                                </div>
+                            </div>
+                            
+                            <div class="card console-section">
+                                <h3>📟 Console Output</h3>
+                                <div id="console" class="console"></div>
+                                <div class="command-input">
+                                    <input type="text" id="command" placeholder="Enter server command..." onkeypress="if(event.key==='Enter') sendCommand()">
+                                    <button onclick="sendCommand()">Send</button>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    <!-- Server Monitor Tab -->
+                    
                     <div id="monitor" class="tab-content">
-                        <div class="grid grid-2">
-                            <div class="card">
-                                <h3>📊 Performance Metrics</h3>
-                                <div class="grid grid-2">
-                                    <div class="metric">
-                                        <span class="metric-value" id="cpu-usage">0%</span>
-                                        <div class="metric-label">CPU Usage</div>
-                                    </div>
-                                    <div class="metric">
-                                        <span class="metric-value" id="memory-usage">0 MB</span>
-                                        <div class="metric-label">Memory Usage</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="card">
-                                <h3>🎯 Server Performance</h3>
-                                <div class="grid grid-2">
-                                    <div class="metric">
-                                        <span class="metric-value" id="monitor-tps">20.0</span>
-                                        <div class="metric-label">Current TPS</div>
-                                    </div>
-                                    <div class="metric">
-                                        <span class="metric-value" id="monitor-players">0</span>
-                                        <div class="metric-label">Active Players</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                         <div class="card">
-                            <h3>⚙️ Optimization Settings</h3>
-                            <p>✅ Aikar's Flags: Enabled</p>
-                            <p>✅ Performance Optimization: Enabled</p>
-                            <p>✅ G1 Garbage Collector: Active</p>
-                            <p>✅ String Deduplication: Enabled</p>
+                            <h3>📊 Server Monitoring</h3>
+                            <p>Real-time server performance metrics will be displayed here.</p>
+                            <div id="server-stats" style="margin-top: 20px;">
+                                <div>CPU Usage: <span id="cpu-usage">0%</span></div>
+                                <div>Memory Usage: <span id="memory-usage">0 MB</span></div>
+                                <div>Uptime: <span id="uptime">0 minutes</span></div>
+                            </div>
                         </div>
                     </div>
-
-                    <!-- Plugins Tab -->
+                    
                     <div id="plugins" class="tab-content">
                         <div class="card">
-                            <h3>🔌 Installed Plugins</h3>
-                            <div id="plugins-list">
-                                <p>Loading plugins...</p>
-                            </div>
-                            <div style="margin-top: 1rem;">
-                                <input type="file" id="plugin-upload" accept=".jar" style="display: none;">
-                                <button class="btn-primary" onclick="document.getElementById('plugin-upload').click()">📁 Upload Plugin</button>
-                                <button class="btn-success" onclick="refreshPlugins()">🔄 Refresh</button>
+                            <h3>🔌 Plugin Management</h3>
+                            <p>Manage your server plugins here.</p>
+                            <div id="plugin-list" style="margin-top: 20px;">
+                                <p>No plugins loaded.</p>
                             </div>
                         </div>
                     </div>
-
-                    <!-- File Manager Tab -->
+                    
                     <div id="files" class="tab-content">
                         <div class="card">
-                            <h3>📁 File Manager - C:\\Users\\MersYeon\\Desktop\\Cacasians</h3>
-                            <div style="margin-bottom: 1rem;">
-                                <input type="file" id="file-upload" multiple style="display: none;">
-                                <button class="btn-primary" onclick="document.getElementById('file-upload').click()">📁 Upload Files</button>
-                                <button class="btn-primary" onclick="createNewFile()">📄 New File</button>
-                                <button class="btn-success" onclick="refreshFiles()">🔄 Refresh</button>
-                            </div>
-                            <div class="file-list" id="file-list">
-                                <p>Loading files...</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Console Tab -->
-                    <div id="console" class="tab-content">
-                        <div class="card">
-                            <h3>💻 Server Console</h3>
-                            <div id="console-output"></div>
-                            <div class="command-section">
-                                <input type="text" id="command-input" placeholder="Enter server command..." onkeypress="if(event.key==='Enter') sendCommand()">
-                                <button class="btn-primary" onclick="sendCommand()">📤 Send</button>
+                            <h3>📁 File Manager</h3>
+                            <div class="file-path" id="current-path">C:\\</div>
+                            <div class="file-manager">
+                                <ul id="file-list" class="file-list">
+                                    <li>Loading files...</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
                 </div>
-
+                
+                <div id="notification" class="notification"></div>
+                
                 <script>
-                    let currentTab = 'dashboard';
-                    let updateInterval;
-
-                    function showTab(tabName) {
-                        // Hide all tabs
+                    let currentPath = 'C:\\\\';
+                    
+                    function switchTab(tabName) {
+                        // Hide all tab contents
                         document.querySelectorAll('.tab-content').forEach(tab => {
                             tab.classList.remove('active');
                         });
+                        
+                        // Remove active class from all nav tabs
                         document.querySelectorAll('.nav-tab').forEach(tab => {
                             tab.classList.remove('active');
                         });
-
-                        // Show selected tab
+                        
+                        // Show selected tab content
                         document.getElementById(tabName).classList.add('active');
+                        
+                        // Add active class to clicked nav tab
                         event.target.classList.add('active');
-                        currentTab = tabName;
-
-                        // Load tab-specific data
-                        if (tabName === 'plugins') refreshPlugins();
-                        if (tabName === 'files') refreshFiles();
-                        if (tabName === 'console') loadConsole();
+                        
+                        // Load content based on tab
+                        if (tabName === 'files') {
+                            loadFiles(currentPath);
+                        }
                     }
-
+                    
+                    function showNotification(message, type = 'success') {
+                        const notification = document.getElementById('notification');
+                        notification.textContent = message;
+                        notification.className = `notification ${type} show`;
+                        
+                        setTimeout(() => {
+                            notification.classList.remove('show');
+                        }, 3000);
+                    }
+                    
                     function startServer() {
                         fetch('/api/start', {method: 'POST'})
                             .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, 'success');
-                                updateStatus();
-                            });
+                            .then(data => showNotification(data.message))
+                            .catch(error => showNotification('Error starting server', 'error'));
                     }
-
+                    
                     function stopServer() {
                         fetch('/api/stop', {method: 'POST'})
                             .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, 'info');
-                                updateStatus();
-                            });
+                            .then(data => showNotification(data.message))
+                            .catch(error => showNotification('Error stopping server', 'error'));
                     }
-
+                    
                     function restartServer() {
                         fetch('/api/restart', {method: 'POST'})
                             .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, 'info');
-                                updateStatus();
-                            });
+                            .then(data => showNotification(data.message))
+                            .catch(error => showNotification('Error restarting server', 'error'));
                     }
-
+                    
+                    function killServer() {
+                        if (confirm('Are you sure you want to force kill the server? This may cause data loss.')) {
+                            fetch('/api/kill', {method: 'POST'})
+                                .then(response => response.json())
+                                .then(data => showNotification(data.message))
+                                .catch(error => showNotification('Error killing server', 'error'));
+                        }
+                    }
+                    
                     function sendCommand() {
-                        const command = document.getElementById('command-input').value;
+                        const command = document.getElementById('command').value;
                         if (!command) return;
-
+                        
                         fetch('/api/command', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -1154,15 +1074,16 @@ class MinecraftServerWrapper:
                         })
                         .then(response => response.json())
                         .then(data => {
-                            document.getElementById('command-input').value = '';
+                            document.getElementById('command').value = '';
                             if (data.error) {
                                 showNotification(data.error, 'error');
                             } else {
-                                showNotification('Command sent successfully', 'success');
+                                showNotification('Command sent successfully');
                             }
-                        });
+                        })
+                        .catch(error => showNotification('Error sending command', 'error'));
                     }
-
+                    
                     function updateStatus() {
                         fetch('/api/status')
                             .then(response => response.json())
@@ -1170,204 +1091,123 @@ class MinecraftServerWrapper:
                                 const statusIndicator = document.querySelector('.status-indicator');
                                 const statusText = document.getElementById('status-text');
                                 const playerCount = document.getElementById('player-count');
-                                const tpsValue = document.getElementById('tps-value');
-                                const cpuUsage = document.getElementById('cpu-usage');
-                                const memoryUsage = document.getElementById('memory-usage');
-                                const monitorTps = document.getElementById('monitor-tps');
-                                const monitorPlayers = document.getElementById('monitor-players');
-
+                                const maxPlayers = document.getElementById('max-players');
+                                
                                 if (data.running) {
                                     statusIndicator.className = 'status-indicator status-running';
-                                    statusText.textContent = 'Running';
+                                    statusText.textContent = 'Server Running';
                                 } else {
                                     statusIndicator.className = 'status-indicator status-stopped';
-                                    statusText.textContent = 'Stopped';
+                                    statusText.textContent = 'Server Stopped';
                                 }
-
+                                
                                 playerCount.textContent = data.players || 0;
-                                tpsValue.textContent = (data.tps || 20.0).toFixed(1);
-                                cpuUsage.textContent = (data.cpu || 0).toFixed(1) + '%';
-                                memoryUsage.textContent = Math.round(data.memory || 0) + ' MB';
-                                monitorTps.textContent = (data.tps || 20.0).toFixed(1);
-                                monitorPlayers.textContent = data.players || 0;
-                            });
+                                maxPlayers.textContent = data.max_players || 20;
+                            })
+                            .catch(error => console.error('Error updating status:', error));
                     }
-
-                    function refreshPlugins() {
-                        fetch('/api/plugins')
-                            .then(response => response.json())
-                            .then(data => {
-                                const pluginsList = document.getElementById('plugins-list');
-                                if (data.plugins && data.plugins.length > 0) {
-                                    pluginsList.innerHTML = data.plugins.map(plugin => `
-                                        <div class="plugin-item">
-                                            <div class="plugin-info">
-                                                <h4>${plugin.name}</h4>
-                                                <small>Size: ${(plugin.size / 1024).toFixed(1)} KB</small>
-                                            </div>
-                                            <div class="file-actions">
-                                                <button class="btn-danger" onclick="deletePlugin('${plugin.filename}')">🗑️ Delete</button>
-                                            </div>
-                                        </div>
-                                    `).join('');
-                                } else {
-                                    pluginsList.innerHTML = '<p>No plugins installed</p>';
-                                }
-                            });
-                    }
-
-                    function refreshFiles() {
-                        fetch('/api/files')
+                    
+                    function loadFiles(path = 'C:\\\\') {
+                        fetch(`/api/files?path=${encodeURIComponent(path)}`)
                             .then(response => response.json())
                             .then(data => {
                                 const fileList = document.getElementById('file-list');
-                                if (data.files && data.files.length > 0) {
-                                    fileList.innerHTML = data.files.map(file => `
-                                        <div class="file-item">
-                                            <div class="file-info">
-                                                <span class="file-icon">${file.is_directory ? '📁' : '📄'}</span>
-                                                <span>${file.name}</span>
-                                                ${!file.is_directory ? `<small>(${(file.size / 1024).toFixed(1)} KB)</small>` : ''}
-                                            </div>
-                                            <div class="file-actions">
-                                                ${!file.is_directory ? `<button class="btn-primary" onclick="downloadFile('${file.path}')">⬇️ Download</button>` : ''}
-                                                <button class="btn-primary" onclick="renameFile('${file.path}', '${file.name}')">✏️ Rename</button>
-                                                <button class="btn-danger" onclick="deleteFile('${file.path}')">🗑️ Delete</button>
-                                            </div>
-                                        </div>
-                                    `).join('');
-                                } else {
-                                    fileList.innerHTML = '<p>No files found</p>';
+                                const currentPathDiv = document.getElementById('current-path');
+                                
+                                currentPath = path;
+                                currentPathDiv.textContent = path;
+                                
+                                if (data.error) {
+                                    fileList.innerHTML = `<li class="file-item"><span class="file-name">Error: ${data.error}</span></li>`;
+                                    return;
                                 }
-                            });
-                    }
-
-                    function loadConsole() {
-                        fetch('/api/console')
-                            .then(response => response.json())
-                            .then(data => {
-                                const consoleOutput = document.getElementById('console-output');
-                                consoleOutput.innerHTML = data.history.map(entry => 
-                                    `<div>[${entry.timestamp}] ${entry.message}</div>`
-                                ).join('');
-                                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-                            });
-                    }
-
-                    function deletePlugin(filename) {
-                        if (confirm(`Delete plugin ${filename}?`)) {
-                            fetch('/api/plugins/delete', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({filename: filename})
+                                
+                                fileList.innerHTML = '';
+                                
+                                // Add parent directory link if not at root
+                                if (path !== 'C:\\\\' && path !== 'C:') {
+                                    const parentPath = path.split('\\\\').slice(0, -1).join('\\\\') || 'C:\\\\';
+                                    const parentItem = document.createElement('li');
+                                    parentItem.className = 'file-item';
+                                    parentItem.innerHTML = `
+                                        <span class="file-icon">📁</span>
+                                        <div class="file-info">
+                                            <div class="file-name">..</div>
+                                            <div class="file-details">Parent Directory</div>
+                                        </div>
+                                    `;
+                                    parentItem.onclick = () => loadFiles(parentPath);
+                                    fileList.appendChild(parentItem);
+                                }
+                                
+                                data.files.forEach(file => {
+                                    const item = document.createElement('li');
+                                    item.className = 'file-item';
+                                    
+                                    const icon = file.type === 'directory' ? '📁' : '📄';
+                                    const size = file.type === 'directory' ? '' : ` - ${file.size}`;
+                                    
+                                    item.innerHTML = `
+                                        <span class="file-icon">${icon}</span>
+                                        <div class="file-info">
+                                            <div class="file-name">${file.name}</div>
+                                            <div class="file-details">${file.modified}${size}</div>
+                                        </div>
+                                        <div class="file-actions">
+                                            ${file.type === 'file' ? '<button class="file-action" onclick="downloadFile(\\''+file.name+'\\')">Download</button>' : ''}
+                                            <button class="file-action" onclick="deleteFile(\\''+file.name+'\\')">Delete</button>
+                                        </div>
+                                    `;
+                                    
+                                    if (file.type === 'directory') {
+                                        item.onclick = (e) => {
+                                            if (!e.target.classList.contains('file-action')) {
+                                                const newPath = path.endsWith('\\\\') ? path + file.name : path + '\\\\' + file.name;
+                                                loadFiles(newPath);
+                                            }
+                                        };
+                                    }
+                                    
+                                    fileList.appendChild(item);
+                                });
                             })
-                            .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, data.success ? 'success' : 'error');
-                                if (data.success) refreshPlugins();
+                            .catch(error => {
+                                console.error('Error loading files:', error);
+                                showNotification('Error loading files', 'error');
                             });
-                        }
                     }
-
-                    function deleteFile(path) {
-                        if (confirm(`Delete ${path}?`)) {
+                    
+                    function downloadFile(filename) {
+                        const url = `/api/files/download/${encodeURIComponent(currentPath)}/${encodeURIComponent(filename)}`;
+                        window.open(url, '_blank');
+                    }
+                    
+                    function deleteFile(filename) {
+                        if (confirm(`Are you sure you want to delete "${filename}"?`)) {
                             fetch('/api/files/delete', {
                                 method: 'POST',
                                 headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({path: path})
+                                body: JSON.stringify({filename: filename, path: currentPath})
                             })
                             .then(response => response.json())
                             .then(data => {
-                                showNotification(data.message, data.success ? 'success' : 'error');
-                                if (data.success) refreshFiles();
-                            });
-                        }
-                    }
-
-                    function renameFile(path, currentName) {
-                        const newName = prompt(`Rename ${currentName} to:`, currentName);
-                        if (newName && newName !== currentName) {
-                            fetch('/api/files/rename', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({path: path, newName: newName})
+                                if (data.error) {
+                                    showNotification(data.error, 'error');
+                                } else {
+                                    showNotification(data.message);
+                                    loadFiles(currentPath);
+                                }
                             })
-                            .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, data.success ? 'success' : 'error');
-                                if (data.success) refreshFiles();
-                            });
+                            .catch(error => showNotification('Error deleting file', 'error'));
                         }
                     }
-
-                    function downloadFile(path) {
-                        window.open(`/api/files/download/${encodeURIComponent(path)}`, '_blank');
-                    }
-
-                    function createNewFile() {
-                        const fileName = prompt('Enter file name:');
-                        if (fileName) {
-                            fetch('/api/files/create', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({name: fileName, content: ''})
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, data.success ? 'success' : 'error');
-                                if (data.success) refreshFiles();
-                            });
-                        }
-                    }
-
-                    function showNotification(message, type) {
-                        const notification = document.createElement('div');
-                        notification.className = `notification ${type}`;
-                        notification.textContent = message;
-                        document.body.appendChild(notification);
-                        setTimeout(() => notification.remove(), 4000);
-                    }
-
-                    // File upload handlers
-                    document.getElementById('plugin-upload').addEventListener('change', function(e) {
-                        const file = e.target.files[0];
-                        if (file) {
-                            const formData = new FormData();
-                            formData.append('plugin', file);
-                            fetch('/api/plugins/upload', {
-                                method: 'POST',
-                                body: formData
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, data.success ? 'success' : 'error');
-                                if (data.success) refreshPlugins();
-                            });
-                        }
-                    });
-
-                    document.getElementById('file-upload').addEventListener('change', function(e) {
-                        const files = e.target.files;
-                        if (files.length > 0) {
-                            const formData = new FormData();
-                            for (let file of files) {
-                                formData.append('files', file);
-                            }
-                            fetch('/api/files/upload', {
-                                method: 'POST',
-                                body: formData
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                showNotification(data.message, data.success ? 'success' : 'error');
-                                if (data.success) refreshFiles();
-                            });
-                        }
-                    });
-
-                    // Auto-update every 5 seconds
-                    updateInterval = setInterval(updateStatus, 5000);
+                    
+                    // Update status every 5 seconds
+                    setInterval(updateStatus, 5000);
                     updateStatus();
+                    
+                    // Load initial files
+                    loadFiles();
                 </script>
             </body>
             </html>
@@ -1378,10 +1218,7 @@ class MinecraftServerWrapper:
             return jsonify({
                 'running': self.server_running,
                 'players': self.current_players,
-                'max_players': self.max_players,
-                'cpu': self.cpu_usage,
-                'memory': self.memory_usage,
-                'tps': self.tps
+                'max_players': self.max_players
             })
         
         @self.web_server.route('/api/start', methods=['POST'])
@@ -1405,6 +1242,19 @@ class MinecraftServerWrapper:
             self.root.after(0, self.restart_server)
             return jsonify({'message': 'Restarting server...'})
         
+        @self.web_server.route('/api/kill', methods=['POST'])
+        def api_kill():
+            try:
+                if self.server_process and self.server_process.poll() is None:
+                    self.server_process.kill()
+                    self.server_running = False
+                    self.log_message("Server process forcefully terminated")
+                    return jsonify({'message': 'Server killed successfully'})
+                else:
+                    return jsonify({'message': 'No server process to kill'})
+            except Exception as e:
+                return jsonify({'error': f'Failed to kill server: {str(e)}'})
+        
         @self.web_server.route('/api/command', methods=['POST'])
         def api_command():
             data = request.get_json()
@@ -1423,198 +1273,108 @@ class MinecraftServerWrapper:
                 return jsonify({'message': 'Command sent'})
             except Exception as e:
                 return jsonify({'error': f'Failed to send command: {str(e)}'})
-
-        @self.web_server.route('/api/plugins')
-        def api_plugins():
-            """Get plugins list"""
-            try:
-                plugins = self.get_plugins_list()
-                return jsonify({'plugins': plugins})
-            except Exception as e:
-                return jsonify({'error': str(e), 'plugins': []})
-
-        @self.web_server.route('/api/plugins/upload', methods=['POST'])
-        def api_plugins_upload():
-            """Upload plugin"""
-            try:
-                if 'plugin' not in request.files:
-                    return jsonify({'success': False, 'message': 'No plugin file provided'})
-                
-                file = request.files['plugin']
-                if file.filename == '':
-                    return jsonify({'success': False, 'message': 'No file selected'})
-                
-                if not file.filename.endswith('.jar'):
-                    return jsonify({'success': False, 'message': 'Only .jar files are allowed'})
-                
-                filename = secure_filename(file.filename)
-                filepath = os.path.join(self.plugins_dir, filename)
-                file.save(filepath)
-                
-                return jsonify({'success': True, 'message': f'Plugin {filename} uploaded successfully'})
-            except Exception as e:
-                return jsonify({'success': False, 'message': f'Upload failed: {str(e)}'})
-
-        @self.web_server.route('/api/plugins/delete', methods=['POST'])
-        def api_plugins_delete():
-            """Delete plugin"""
-            try:
-                data = request.get_json()
-                filename = data.get('filename', '')
-                
-                if not filename:
-                    return jsonify({'success': False, 'message': 'No filename provided'})
-                
-                filepath = os.path.join(self.plugins_dir, filename)
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-                    return jsonify({'success': True, 'message': f'Plugin {filename} deleted successfully'})
-                else:
-                    return jsonify({'success': False, 'message': 'Plugin not found'})
-            except Exception as e:
-                return jsonify({'success': False, 'message': f'Delete failed: {str(e)}'})
-
+        
         @self.web_server.route('/api/files')
         def api_files():
-            """Get files list"""
+            path = request.args.get('path', 'C:\\\\')
             try:
-                files = self.get_file_list()
+                files = self.get_file_list(path)
                 return jsonify({'files': files})
             except Exception as e:
-                return jsonify({'error': str(e), 'files': []})
-
-        @self.web_server.route('/api/files/upload', methods=['POST'])
-        def api_files_upload():
-            """Upload files"""
-            try:
-                if 'files' not in request.files:
-                    return jsonify({'success': False, 'message': 'No files provided'})
-                
-                files = request.files.getlist('files')
-                uploaded_count = 0
-                
-                for file in files:
-                    if file.filename != '':
-                        filename = secure_filename(file.filename)
-                        filepath = os.path.join(self.file_manager_root, filename)
-                        file.save(filepath)
-                        uploaded_count += 1
-                
-                return jsonify({'success': True, 'message': f'{uploaded_count} file(s) uploaded successfully'})
-            except Exception as e:
-                return jsonify({'success': False, 'message': f'Upload failed: {str(e)}'})
-
+                return jsonify({'error': str(e)})
+        
         @self.web_server.route('/api/files/delete', methods=['POST'])
         def api_files_delete():
-            """Delete file"""
+            data = request.get_json()
+            filename = data.get('filename')
+            path = data.get('path', 'C:\\\\')
+            
+            if not filename:
+                return jsonify({'error': 'No filename provided'})
+            
             try:
-                data = request.get_json()
-                path = data.get('path', '')
+                file_path = os.path.join(path, filename)
+                file_path = os.path.normpath(file_path)
                 
-                if not path:
-                    return jsonify({'success': False, 'message': 'No path provided'})
-                
-                # Security check - ensure path is within allowed directory
-                full_path = os.path.abspath(path)
-                allowed_path = os.path.abspath(self.file_manager_root)
-                
-                if not full_path.startswith(allowed_path):
-                    return jsonify({'success': False, 'message': 'Access denied'})
-                
-                if os.path.exists(full_path):
-                    if os.path.isdir(full_path):
-                        shutil.rmtree(full_path)
-                    else:
-                        os.remove(full_path)
-                    return jsonify({'success': True, 'message': f'Deleted successfully'})
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    return jsonify({'message': f'File {filename} deleted successfully'})
+                elif os.path.isdir(file_path):
+                    import shutil
+                    shutil.rmtree(file_path)
+                    return jsonify({'message': f'Directory {filename} deleted successfully'})
                 else:
-                    return jsonify({'success': False, 'message': 'File not found'})
+                    return jsonify({'error': 'File or directory not found'})
             except Exception as e:
-                return jsonify({'success': False, 'message': f'Delete failed: {str(e)}'})
-
-        @self.web_server.route('/api/files/rename', methods=['POST'])
-        def api_files_rename():
-            """Rename file"""
-            try:
-                data = request.get_json()
-                path = data.get('path', '')
-                new_name = data.get('newName', '')
-                
-                if not path or not new_name:
-                    return jsonify({'success': False, 'message': 'Path and new name required'})
-                
-                # Security check
-                full_path = os.path.abspath(path)
-                allowed_path = os.path.abspath(self.file_manager_root)
-                
-                if not full_path.startswith(allowed_path):
-                    return jsonify({'success': False, 'message': 'Access denied'})
-                
-                if os.path.exists(full_path):
-                    new_path = os.path.join(os.path.dirname(full_path), secure_filename(new_name))
-                    os.rename(full_path, new_path)
-                    return jsonify({'success': True, 'message': f'Renamed successfully'})
-                else:
-                    return jsonify({'success': False, 'message': 'File not found'})
-            except Exception as e:
-                return jsonify({'success': False, 'message': f'Rename failed: {str(e)}'})
-
-        @self.web_server.route('/api/files/create', methods=['POST'])
-        def api_files_create():
-            """Create new file"""
-            try:
-                data = request.get_json()
-                name = data.get('name', '')
-                content = data.get('content', '')
-                
-                if not name:
-                    return jsonify({'success': False, 'message': 'Filename required'})
-                
-                filename = secure_filename(name)
-                filepath = os.path.join(self.file_manager_root, filename)
-                
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(content)
-                
-                return jsonify({'success': True, 'message': f'File {filename} created successfully'})
-            except Exception as e:
-                return jsonify({'success': False, 'message': f'Create failed: {str(e)}'})
-
+                return jsonify({'error': f'Failed to delete: {str(e)}'})
+        
         @self.web_server.route('/api/files/download/<path:filename>')
         def api_files_download(filename):
-            """Download file"""
             try:
-                filepath = os.path.join(self.file_manager_root, filename)
+                # Decode the path
+                file_path = os.path.normpath(filename)
                 
-                # Security check
-                full_path = os.path.abspath(filepath)
-                allowed_path = os.path.abspath(self.file_manager_root)
-                
-                if not full_path.startswith(allowed_path):
-                    return jsonify({'error': 'Access denied'}), 403
-                
-                if os.path.exists(full_path) and os.path.isfile(full_path):
-                    return send_file(full_path, as_attachment=True)
+                if os.path.isfile(file_path):
+                    return send_file(file_path, as_attachment=True)
                 else:
                     return jsonify({'error': 'File not found'}), 404
             except Exception as e:
-                return jsonify({'error': str(e)}), 500
-
-        @self.web_server.route('/api/console')
-        def api_console():
-            """Get console history"""
-            try:
-                # Return recent console messages
-                history = []
-                for message in self.console_history[-100:]:  # Last 100 messages
-                    history.append({
-                        'timestamp': message.get('timestamp', ''),
-                        'message': message.get('message', '')
-                    })
-                return jsonify({'history': history})
-            except Exception as e:
-                return jsonify({'error': str(e), 'history': []})
+                return jsonify({'error': f'Failed to download file: {str(e)}'}), 500
     
+    def get_file_list(self, path='C:\\\\'):
+        """Get list of files and directories"""
+        try:
+            # Normalize the path
+            if not path or path == '':
+                path = 'C:\\\\'
+            
+            path = os.path.normpath(path)
+            
+            if not os.path.exists(path):
+                raise Exception(f"Path does not exist: {path}")
+            
+            if not os.path.isdir(path):
+                raise Exception(f"Path is not a directory: {path}")
+            
+            files = []
+            try:
+                for item in os.listdir(path):
+                    item_path = os.path.join(path, item)
+                    try:
+                        stat = os.stat(item_path)
+                        is_dir = os.path.isdir(item_path)
+                        
+                        file_info = {
+                            'name': item,
+                            'type': 'directory' if is_dir else 'file',
+                            'size': self.format_file_size(stat.st_size) if not is_dir else '',
+                            'modified': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(stat.st_mtime))
+                        }
+                        files.append(file_info)
+                    except (OSError, PermissionError):
+                        # Skip files we can't access
+                        continue
+                        
+            except PermissionError:
+                raise Exception(f"Permission denied accessing: {path}")
+            
+            # Sort directories first, then files
+            files.sort(key=lambda x: (x['type'] == 'file', x['name'].lower()))
+            return files
+            
+        except Exception as e:
+            raise Exception(f"Error listing files: {str(e)}")
+    
+    def format_file_size(self, size_bytes):
+        """Format file size in human readable format"""
+        if size_bytes == 0:
+            return "0 B"
+        size_names = ["B", "KB", "MB", "GB", "TB"]
+        import math
+        i = int(math.floor(math.log(size_bytes, 1024)))
+        p = math.pow(1024, i)
+        s = round(size_bytes / p, 2)
+        return f"{s} {size_names[i]}"
     def load_users(self):
         """Load users from file"""
         try:
