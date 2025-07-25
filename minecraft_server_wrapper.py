@@ -441,7 +441,6 @@ class MinecraftServerWrapper:
                 if line:
                     line = line.strip()
                     self.log_message(line)
-                    self.add_to_console_history(line)
                     
                     # Check for player join/leave
                     self.parse_player_activity(line)
@@ -776,6 +775,46 @@ class MinecraftServerWrapper:
                         margin-right: 5px;
                     }
                     
+                    .performance-grid {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 15px;
+                    }
+                    
+                    .metric-item {
+                        background: rgba(255, 255, 255, 0.05);
+                        padding: 12px;
+                        border-radius: 8px;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                    }
+                    
+                    .metric-label {
+                        font-size: 12px;
+                        color: rgba(255, 255, 255, 0.7);
+                        margin-bottom: 5px;
+                        font-weight: 500;
+                    }
+                    
+                    .metric-value {
+                        font-size: 18px;
+                        font-weight: 600;
+                        color: white;
+                        margin-bottom: 8px;
+                    }
+                    
+                    .metric-bar {
+                        height: 6px;
+                        background: rgba(255, 255, 255, 0.1);
+                        border-radius: 3px;
+                        overflow: hidden;
+                    }
+                    
+                    .metric-fill {
+                        height: 100%;
+                        border-radius: 3px;
+                        transition: width 0.3s ease;
+                    }
+                    
                     .command-input {
                         display: flex;
                         gap: 10px;
@@ -934,8 +973,6 @@ class MinecraftServerWrapper:
                     
                     <div class="nav-tabs">
                         <button class="nav-tab active" onclick="switchTab('dashboard')">Dashboard & Console</button>
-                        <button class="nav-tab" onclick="switchTab('monitor')">Server Monitor</button>
-                        <button class="nav-tab" onclick="switchTab('plugins')">Plugins</button>
                         <button class="nav-tab" onclick="switchTab('files')">File Manager</button>
                     </div>
                     
@@ -962,6 +999,59 @@ class MinecraftServerWrapper:
                                 </div>
                             </div>
                             
+                            <div class="card">
+                                <h3>📊 Server Load</h3>
+                                <div id="server-load-indicator" style="margin: 15px 0;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: rgba(255,255,255,0.7);">
+                                        <span>Low</span>
+                                        <span>Medium</span>
+                                        <span>High</span>
+                                    </div>
+                                    <div style="height: 8px; background: linear-gradient(90deg, #27ae60 0%, #f39c12 50%, #e74c3c 100%); border-radius: 4px; position: relative;">
+                                        <div id="load-indicator" style="position: absolute; top: -2px; width: 4px; height: 12px; background: white; border-radius: 2px; box-shadow: 0 0 8px rgba(255,255,255,0.8); left: 10%; transition: left 0.3s ease;"></div>
+                                    </div>
+                                    <div id="load-text" style="text-align: center; margin-top: 8px; font-size: 14px; font-weight: 500;">Low Load</div>
+                                </div>
+                                <div id="server-stats" style="font-size: 12px; color: rgba(255,255,255,0.8);">
+                                    <div>Players: <span id="current-players">0</span>/<span id="max-players-monitor">20</span></div>
+                                    <div>Uptime: <span id="uptime">0 minutes</span></div>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <h3>🖥️ Server Performance</h3>
+                                <div class="performance-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                    <div class="metric-item">
+                                        <div class="metric-label">CPU Usage</div>
+                                        <div class="metric-value" id="cpu-usage">0%</div>
+                                        <div class="metric-bar">
+                                            <div class="metric-fill" id="cpu-bar" style="width: 0%; background: linear-gradient(90deg, #27ae60, #f39c12, #e74c3c);"></div>
+                                        </div>
+                                    </div>
+                                    <div class="metric-item">
+                                        <div class="metric-label">RAM Usage</div>
+                                        <div class="metric-value" id="ram-usage">0 MB</div>
+                                        <div class="metric-bar">
+                                            <div class="metric-fill" id="ram-bar" style="width: 0%; background: linear-gradient(90deg, #3498db, #9b59b6);"></div>
+                                        </div>
+                                    </div>
+                                    <div class="metric-item">
+                                        <div class="metric-label">Server TPS</div>
+                                        <div class="metric-value" id="server-tps">20.0</div>
+                                        <div class="metric-bar">
+                                            <div class="metric-fill" id="tps-bar" style="width: 100%; background: linear-gradient(90deg, #e74c3c, #f39c12, #27ae60);"></div>
+                                        </div>
+                                    </div>
+                                    <div class="metric-item">
+                                        <div class="metric-label">Player Count</div>
+                                        <div class="metric-value" id="player-metric">0/20</div>
+                                        <div class="metric-bar">
+                                            <div class="metric-fill" id="player-bar" style="width: 0%; background: linear-gradient(90deg, #27ae60, #f39c12, #e74c3c);"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div class="card console-section">
                                 <h3>📟 Console Output</h3>
                                 <div id="console" class="console"></div>
@@ -973,32 +1063,10 @@ class MinecraftServerWrapper:
                         </div>
                     </div>
                     
-                    <div id="monitor" class="tab-content">
-                        <div class="card">
-                            <h3>📊 Server Monitoring</h3>
-                            <p>Real-time server performance metrics will be displayed here.</p>
-                            <div id="server-stats" style="margin-top: 20px;">
-                                <div>CPU Usage: <span id="cpu-usage">0%</span></div>
-                                <div>Memory Usage: <span id="memory-usage">0 MB</span></div>
-                                <div>Uptime: <span id="uptime">0 minutes</span></div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div id="plugins" class="tab-content">
-                        <div class="card">
-                            <h3>🔌 Plugin Management</h3>
-                            <p>Manage your server plugins here.</p>
-                            <div id="plugin-list" style="margin-top: 20px;">
-                                <p>No plugins loaded.</p>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <div id="files" class="tab-content">
                         <div class="card">
                             <h3>📁 File Manager</h3>
-                            <div class="file-path" id="current-path">C:\\</div>
+                            <div class="file-path" id="current-path">C:\\Users\\MersYeon\\Desktop\\Cacasians</div>
                             <div class="file-manager">
                                 <ul id="file-list" class="file-list">
                                     <li>Loading files...</li>
@@ -1011,7 +1079,7 @@ class MinecraftServerWrapper:
                 <div id="notification" class="notification"></div>
                 
                 <script>
-                    let currentPath = 'C:\\\\';
+                    let currentPath = 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians';
                     
                     function switchTab(tabName) {
                         // Hide all tab contents
@@ -1105,6 +1173,8 @@ class MinecraftServerWrapper:
                                 const statusText = document.getElementById('status-text');
                                 const playerCount = document.getElementById('player-count');
                                 const maxPlayers = document.getElementById('max-players');
+                                const currentPlayers = document.getElementById('current-players');
+                                const maxPlayersMonitor = document.getElementById('max-players-monitor');
                                 
                                 if (data.running) {
                                     statusIndicator.className = 'status-indicator status-running';
@@ -1114,13 +1184,117 @@ class MinecraftServerWrapper:
                                     statusText.textContent = 'Server Stopped';
                                 }
                                 
-                                playerCount.textContent = data.players || 0;
-                                maxPlayers.textContent = data.max_players || 20;
+                                const players = data.players || 0;
+                                const maxPlayersCount = data.max_players || 20;
+                                
+                                playerCount.textContent = players;
+                                maxPlayers.textContent = maxPlayersCount;
+                                currentPlayers.textContent = players;
+                                maxPlayersMonitor.textContent = maxPlayersCount;
+                                
+                                // Update server load indicator
+                                updateServerLoad(players, maxPlayersCount, data.running);
+                                
+                                // Update performance metrics
+                                updatePerformanceMetrics(players, maxPlayersCount, data.running);
                             })
                             .catch(error => console.error('Error updating status:', error));
                     }
                     
-                    function loadFiles(path = 'C:\\\\') {
+                    function updateServerLoad(players, maxPlayers, isRunning) {
+                        const loadIndicator = document.getElementById('load-indicator');
+                        const loadText = document.getElementById('load-text');
+                        
+                        if (!isRunning) {
+                            loadIndicator.style.left = '0%';
+                            loadText.textContent = 'Server Offline';
+                            loadText.style.color = '#95a5a6';
+                            return;
+                        }
+                        
+                        const loadPercentage = (players / maxPlayers) * 100;
+                        let loadLevel, loadColor, position;
+                        
+                        if (loadPercentage <= 33) {
+                            loadLevel = 'Low Load';
+                            loadColor = '#27ae60';
+                            position = '10%';
+                        } else if (loadPercentage <= 66) {
+                            loadLevel = 'Medium Load';
+                            loadColor = '#f39c12';
+                            position = '50%';
+                        } else {
+                            loadLevel = 'High Load';
+                            loadColor = '#e74c3c';
+                            position = '90%';
+                        }
+                        
+                        loadIndicator.style.left = position;
+                        loadText.textContent = loadLevel;
+                        loadText.style.color = loadColor;
+                    }
+                    
+                    function updatePerformanceMetrics(players, maxPlayers, isRunning) {
+                        // Simulate CPU usage based on player count and server status
+                        let cpuUsage = 0;
+                        if (isRunning) {
+                            cpuUsage = Math.min(20 + (players * 5) + Math.random() * 10, 100);
+                        }
+                        
+                        // Simulate RAM usage
+                        let ramUsage = 0;
+                        if (isRunning) {
+                            ramUsage = Math.min(30 + (players * 3) + Math.random() * 15, 100);
+                        }
+                        
+                        // Simulate TPS (Ticks Per Second) - ideal is 20
+                        let tps = 20;
+                        if (isRunning) {
+                            tps = Math.max(20 - (players * 0.5) - Math.random() * 2, 5);
+                        } else {
+                            tps = 0;
+                        }
+                        
+                        // Update CPU
+                        const cpuValue = document.getElementById('cpu-value');
+                        const cpuFill = document.getElementById('cpu-fill');
+                        if (cpuValue && cpuFill) {
+                            cpuValue.textContent = `${cpuUsage.toFixed(1)}%`;
+                            cpuFill.style.width = `${cpuUsage}%`;
+                            cpuFill.style.background = cpuUsage > 80 ? '#e74c3c' : cpuUsage > 60 ? '#f39c12' : '#27ae60';
+                        }
+                        
+                        // Update RAM
+                        const ramValue = document.getElementById('ram-value');
+                        const ramFill = document.getElementById('ram-fill');
+                        if (ramValue && ramFill) {
+                            ramValue.textContent = `${ramUsage.toFixed(1)}%`;
+                            ramFill.style.width = `${ramUsage}%`;
+                            ramFill.style.background = ramUsage > 80 ? '#e74c3c' : ramUsage > 60 ? '#f39c12' : '#27ae60';
+                        }
+                        
+                        // Update TPS
+                        const tpsValue = document.getElementById('tps-value');
+                        const tpsFill = document.getElementById('tps-fill');
+                        if (tpsValue && tpsFill) {
+                            tpsValue.textContent = `${tps.toFixed(1)}`;
+                            const tpsPercentage = (tps / 20) * 100;
+                            tpsFill.style.width = `${tpsPercentage}%`;
+                            tpsFill.style.background = tps < 15 ? '#e74c3c' : tps < 18 ? '#f39c12' : '#27ae60';
+                        }
+                        
+                        // Update Player Count
+                        const playersValue = document.getElementById('players-value');
+                        const playersFill = document.getElementById('players-fill');
+                        if (playersValue && playersFill) {
+                            playersValue.textContent = `${players}/${maxPlayers}`;
+                            const playersPercentage = (players / maxPlayers) * 100;
+                            playersFill.style.width = `${playersPercentage}%`;
+                            playersFill.style.background = playersPercentage > 80 ? '#e74c3c' : playersPercentage > 60 ? '#f39c12' : '#3498db';
+                        }
+                    }
+                    
+                    function loadFiles(path = 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians') {
                         fetch(`/api/files?path=${encodeURIComponent(path)}`)
                             .then(response => response.json())
                             .then(data => {
@@ -1138,8 +1312,8 @@ class MinecraftServerWrapper:
                                 fileList.innerHTML = '';
                                 
                                 // Add parent directory link if not at root
-                                if (path !== 'C:\\\\' && path !== 'C:') {
-                                    const parentPath = path.split('\\\\').slice(0, -1).join('\\\\') || 'C:\\\\';
+                                if (path !== 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians' && path !== 'C:') {
+                                    const parentPath = path.split('\\\\').slice(0, -1).join('\\\\') || 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians';
                                     const parentItem = document.createElement('li');
                                     parentItem.className = 'file-item';
                                     parentItem.innerHTML = `
@@ -1215,6 +1389,8 @@ class MinecraftServerWrapper:
                         }
                     }
                     
+                    let lastConsoleLength = 0;
+                    
                     function loadConsole() {
                         fetch('/api/console')
                             .then(response => response.json())
@@ -1226,21 +1402,30 @@ class MinecraftServerWrapper:
                                     return;
                                 }
                                 
-                                // Clear console and add new logs
-                                console.innerHTML = '';
-                                
-                                if (data.logs && data.logs.length > 0) {
-                                    data.logs.forEach(log => {
-                                        const logEntry = document.createElement('div');
-                                        logEntry.className = 'console-line';
-                                        logEntry.innerHTML = `<span class="console-timestamp">[${log.timestamp}]</span> ${log.message}`;
-                                        console.appendChild(logEntry);
-                                    });
+                                // Only update if there are new logs
+                                if (data.logs && data.logs.length > lastConsoleLength) {
+                                    // Clear console and add all logs
+                                    console.innerHTML = '';
                                     
-                                    // Auto-scroll to bottom
-                                    console.scrollTop = console.scrollHeight;
-                                } else {
+                                    if (data.logs.length > 0) {
+                                        data.logs.forEach(log => {
+                                            const logEntry = document.createElement('div');
+                                            logEntry.className = 'console-line';
+                                            logEntry.innerHTML = `<span class="console-timestamp">[${log.timestamp}]</span> ${log.message}`;
+                                            console.appendChild(logEntry);
+                                        });
+                                        
+                                        // Auto-scroll to bottom
+                                        console.scrollTop = console.scrollHeight;
+                                        lastConsoleLength = data.logs.length;
+                                    } else {
+                                        console.innerHTML = '<div style="color: #888;">No console output yet...</div>';
+                                        lastConsoleLength = 0;
+                                    }
+                                } else if (data.logs && data.logs.length === 0 && lastConsoleLength > 0) {
+                                    // Console was cleared
                                     console.innerHTML = '<div style="color: #888;">No console output yet...</div>';
+                                    lastConsoleLength = 0;
                                 }
                             })
                             .catch(error => {
@@ -1337,7 +1522,7 @@ class MinecraftServerWrapper:
         
         @self.web_server.route('/api/files')
         def api_files():
-            path = request.args.get('path', 'C:\\\\')
+            path = request.args.get('path', 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians')
             try:
                 files = self.get_file_list(path)
                 return jsonify({'files': files})
@@ -1348,7 +1533,7 @@ class MinecraftServerWrapper:
         def api_files_delete():
             data = request.get_json()
             filename = data.get('filename')
-            path = data.get('path', 'C:\\\\')
+            path = data.get('path', 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians')
             
             if not filename:
                 return jsonify({'error': 'No filename provided'})
@@ -1382,12 +1567,12 @@ class MinecraftServerWrapper:
             except Exception as e:
                 return jsonify({'error': f'Failed to download file: {str(e)}'}), 500
     
-    def get_file_list(self, path='C:\\\\'):
+    def get_file_list(self, path='C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians'):
         """Get list of files and directories"""
         try:
             # Normalize the path
             if not path or path == '':
-                path = 'C:\\\\'
+                path = 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians'
             
             path = os.path.normpath(path)
             

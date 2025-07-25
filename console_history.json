@@ -2,5 +2,20 @@
   {
     "timestamp": "20:39:10",
     "message": "Web interface started on port 5000"
+  },
+  {
+    "timestamp": "22:55:45",
+    "message": "Web interface started on port 5000",
+    "time": 1753455345.764986
+  },
+  {
+    "timestamp": "23:16:28",
+    "message": "Web interface started on port 5000",
+    "time": 1753456588.158547
+  },
+  {
+    "timestamp": "23:29:48",
+    "message": "Web interface started on port 5000",
+    "time": 1753457388.789342
   }
 ]
