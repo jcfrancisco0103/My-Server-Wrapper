@@ -3323,7 +3323,7 @@ Created by: Aikar (Empire Minecraft)"""
                                     // Load backend history
                                     data.history.forEach(entry => {
                                         const timestamp = new Date(entry.timestamp).toLocaleTimeString();
-                                        const formattedMessage = `<span style="color: #888;">[${timestamp}]</span> <span style="color: #00ff00;">${entry.message}</span>`;
+                                        const formattedMessage = `<span style="color: #888;">[$${timestamp}]</span> <span style="color: #00ff00;">$${entry.message}</span>`;
                                         consoleElement.innerHTML += formattedMessage + '<br>';
                                     });
                                     
@@ -3388,7 +3388,7 @@ Created by: Aikar (Empire Minecraft)"""
                                 colorClass = 'style="color: #00ff00;"';
                         }
                         
-                        const formattedMessage = `<span style="color: #888;">[${timestamp}]</span> <span ${colorClass}>${message}</span>`;
+                        const formattedMessage = `<span style="color: #888;">[$${timestamp}]</span> <span $${colorClass}>$${message}</span>`;
                         consoleElement.innerHTML += formattedMessage + '<br>';
                         consoleElement.scrollTop = consoleElement.scrollHeight;
                         
@@ -3772,12 +3772,12 @@ Created by: Aikar (Empire Minecraft)"""
                             
                             // Update CPU
                             const cpuUsage = parseFloat(data.cpu_usage || (Math.random() * 30 + 10).toFixed(1));
-                            sidebarCpu.textContent = `${cpuUsage.toFixed(1)}%`;
+                            sidebarCpu.textContent = `$${cpuUsage.toFixed(1)}%`;
                             sidebarCpu.className = 'monitor-value ' + (cpuUsage < 30 ? 'good' : cpuUsage < 60 ? 'warning' : 'critical');
                             
                             // Update RAM
                             const memoryUsage = parseFloat(data.memory_usage || (Math.random() * 500 + 200).toFixed(0));
-                            sidebarRam.textContent = `${memoryUsage.toFixed(0)} MB`;
+                            sidebarRam.textContent = `$${memoryUsage.toFixed(0)} MB`;
                             sidebarRam.className = 'monitor-value ' + (memoryUsage < 512 ? 'good' : memoryUsage < 800 ? 'warning' : 'critical');
                             
                             // Update TPS
@@ -4981,7 +4981,7 @@ Created by: Aikar (Empire Minecraft)"""
                                  if (response.error) {
                                      alert('Upload error: ' + response.error);
                                  } else {
-                                     alert(`Successfully uploaded ${response.uploaded} file(s)!`);
+                                     alert(`Successfully uploaded $${response.uploaded} file(s)!`);
                                      loadFiles(currentPath); // Refresh file list
                                  }
                              } else {
@@ -5013,12 +5013,12 @@ Created by: Aikar (Empire Minecraft)"""
                                  // Update RAM
                                  document.getElementById('ram-value').textContent = data.ram.toFixed(1) + '%';
                                  document.getElementById('ram-bar').style.width = data.ram + '%';
-                                 document.getElementById('ram-status').textContent = `${data.ram_used}GB / ${data.ram_total}GB`;
+                                 document.getElementById('ram-status').textContent = `$${data.ram_used}GB / $${data.ram_total}GB`;
                                  
                                  // Update Storage
                                  document.getElementById('storage-value').textContent = data.storage.toFixed(1) + '%';
                                  document.getElementById('storage-bar').style.width = data.storage + '%';
-                                 document.getElementById('storage-status').textContent = `${data.storage_used}GB / ${data.storage_total}GB`;
+                                 document.getElementById('storage-status').textContent = `$${data.storage_used}GB / $${data.storage_total}GB`;
                                  
                                  // Update TPS
                                  document.getElementById('tps-value').textContent = data.tps.toFixed(1);
@@ -5060,7 +5060,7 @@ Created by: Aikar (Empire Minecraft)"""
                          const fileName = selectedFile.dataset.name;
                          const filePath = selectedFile.dataset.path;
                          
-                         if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
+                         if (confirm(`Are you sure you want to delete "$${fileName}"?`)) {
                              fetch(`/api/file/$${encodeURIComponent(filePath)}`, {
                                  method: 'DELETE'
                              })
@@ -5090,9 +5090,9 @@ Created by: Aikar (Empire Minecraft)"""
                          const fileName = selectedFile.dataset.name;
                          const filePath = selectedFile.dataset.path;
                          
-                         const newName = prompt(`Enter new name for "${fileName}":`, fileName);
+                         const newName = prompt(`Enter new name for "$${fileName}":`, fileName);
                          if (newName && newName !== fileName) {
-                             fetch(`/api/file/${encodeURIComponent(filePath)}/rename`, {
+                             fetch(`/api/file/$${encodeURIComponent(filePath)}/rename`, {
                                  method: 'POST',
                                  headers: {
                                      'Content-Type': 'application/json',
@@ -5658,7 +5658,7 @@ Created by: Aikar (Empire Minecraft)"""
     <script>
         function showMessage(message, type) {
             const messageDiv = document.getElementById('message');
-            messageDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            messageDiv.innerHTML = `<div class="alert alert-$${type}">$${message}</div>`;
             setTimeout(() => { messageDiv.innerHTML = ''; }, 5000);
         }
 
