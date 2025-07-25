@@ -1286,23 +1286,15 @@ These optimizations can significantly improve server TPS and reduce lag."""
             "-XX:+PerfDisableSharedMem",
             "-XX:+UseStringDeduplication",
             "-XX:+UseFastUnorderedTimeStamps",
-            "-XX:+UseAES",
-            "-XX:+UseAESIntrinsics",
-            "-XX:UseAVX=2",
-            "-XX:+UseFMA",
             
             # Memory and compilation optimizations
             "-XX:+UseCompressedOops",
             "-XX:+UseCompressedClassPointers",
-            "-XX:+UseLargePages",
-            "-XX:LargePageSizeInBytes=2M",
             
             # JIT compiler optimizations
             "-XX:+UseCodeCacheFlushing",
             "-XX:+SegmentedCodeCache",
-            "-XX:+UseFastJNIAccessors",
             "-XX:+OptimizeStringConcat",
-            "-XX:+UseStringCache",
             
             # Network and I/O optimizations
             "-Djava.net.preferIPv4Stack=true",
@@ -1322,15 +1314,7 @@ These optimizations can significantly improve server TPS and reduce lag."""
         # Add memory-specific optimizations
         if max_mem_value >= 4:  # 4GB or more
             flags.extend([
-                "-XX:+UseLargePages",
-                "-XX:+UseTransparentHugePages",
                 "-XX:+AggressiveOpts"
-            ])
-        
-        if max_mem_value >= 8:  # 8GB or more
-            flags.extend([
-                "-XX:+UseNUMA",
-                "-XX:+UseParallelOldGC"
             ])
         
         return flags
@@ -3514,23 +3498,95 @@ Created by: Aikar (Empire Minecraft)"""
                     }
                     
                     function startServer() {
-                        socket.emit('server_control', {action: 'start'});
+                        fetch('/api/server_control', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ action: 'start' })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Server start command sent');
+                            } else {
+                                alert('Error: ' + (data.error || 'Failed to start server'));
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error starting server:', error);
+                            alert('Error starting server');
+                        });
                         animateButton(event.target);
                     }
                     
                     function stopServer() {
-                        socket.emit('server_control', {action: 'stop'});
+                        fetch('/api/server_control', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ action: 'stop' })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Server stop command sent');
+                            } else {
+                                alert('Error: ' + (data.error || 'Failed to stop server'));
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error stopping server:', error);
+                            alert('Error stopping server');
+                        });
                         animateButton(event.target);
                     }
                     
                     function restartServer() {
-                        socket.emit('server_control', {action: 'restart'});
+                        fetch('/api/server_control', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ action: 'restart' })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Server restart command sent');
+                            } else {
+                                alert('Error: ' + (data.error || 'Failed to restart server'));
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error restarting server:', error);
+                            alert('Error restarting server');
+                        });
                         animateButton(event.target);
                     }
                     
                     function killServer() {
                         if (confirm('Are you sure you want to forcefully kill the server? This may cause data loss.')) {
-                            socket.emit('server_control', {action: 'kill'});
+                            fetch('/api/server_control', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ action: 'kill' })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    console.log('Server kill command sent');
+                                } else {
+                                    alert('Error: ' + (data.error || 'Failed to kill server'));
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error killing server:', error);
+                                alert('Error killing server');
+                            });
                             animateButton(event.target);
                         }
                     }
@@ -5545,6 +5601,218 @@ Created by: Aikar (Empire Minecraft)"""
                         'tps': 20.0,
                         'error': str(e)
                     })
+            
+            @self.web_server.route('/properties')
+            @require_auth
+            def server_properties():
+                """Server Properties page"""
+                try:
+                    # Read server.properties file
+                    properties_file = os.path.join(self.server_directory, 'server.properties')
+                    properties_content = ""
+                    
+                    if os.path.exists(properties_file):
+                        with open(properties_file, 'r', encoding='utf-8') as f:
+                            properties_content = f.read()
+                    else:
+                        properties_content = "# Minecraft server properties\n# (File not found - will be created when saved)\n"
+                    
+                    return render_template_string('''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Properties - Minecraft Server Wrapper</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .btn { padding: 10px 20px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn:hover { opacity: 0.8; }
+        textarea { width: 100%; height: 500px; font-family: monospace; font-size: 14px; border: 1px solid #ddd; border-radius: 4px; padding: 10px; }
+        .alert { padding: 15px; margin-bottom: 20px; border: 1px solid transparent; border-radius: 4px; }
+        .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
+        .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Server Properties</h1>
+            <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+        
+        <div id="message"></div>
+        
+        <form id="propertiesForm">
+            <textarea id="propertiesContent" name="content" placeholder="Server properties content...">{{ content }}</textarea>
+            <div style="margin-top: 15px;">
+                <button type="submit" class="btn btn-success">Save Properties</button>
+                <button type="button" class="btn btn-primary" onclick="reloadProperties()">Reload from File</button>
+                <button type="button" class="btn btn-primary" onclick="reloadServer()">Reload Server</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function showMessage(message, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => { messageDiv.innerHTML = ''; }, 5000);
+        }
+
+        document.getElementById('propertiesForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const content = document.getElementById('propertiesContent').value;
+            
+            fetch('/api/save_properties', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: content })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Properties saved successfully!', 'success');
+                } else {
+                    showMessage('Error: ' + (data.error || 'Failed to save properties'), 'danger');
+                }
+            })
+            .catch(error => {
+                showMessage('Error: ' + error.message, 'danger');
+            });
+        });
+
+        function reloadProperties() {
+            fetch('/api/reload_properties')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('propertiesContent').value = data.content;
+                    showMessage('Properties reloaded from file!', 'success');
+                } else {
+                    showMessage('Error: ' + (data.error || 'Failed to reload properties'), 'danger');
+                }
+            })
+            .catch(error => {
+                showMessage('Error: ' + error.message, 'danger');
+            });
+        }
+
+        function reloadServer() {
+            fetch('/api/reload_server', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Server reload command sent!', 'success');
+                } else {
+                    showMessage('Error: ' + (data.error || 'Failed to reload server'), 'danger');
+                }
+            })
+            .catch(error => {
+                showMessage('Error: ' + error.message, 'danger');
+            });
+        }
+    </script>
+</body>
+</html>
+                    ''', content=properties_content)
+                except Exception as e:
+                    return f"Error loading properties: {str(e)}", 500
+            
+            @self.web_server.route('/api/save_properties', methods=['POST'])
+            @require_auth
+            def save_properties():
+                """Save server properties"""
+                try:
+                    data = request.get_json()
+                    content = data.get('content', '')
+                    
+                    properties_file = os.path.join(self.server_directory, 'server.properties')
+                    with open(properties_file, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    
+                    self.log_message("Server properties saved via web interface")
+                    
+                    # Send reload command if server is running
+                    if self.server_running:
+                        self.send_server_command("reload")
+                    
+                    return jsonify({'success': True})
+                except Exception as e:
+                    return jsonify({'success': False, 'error': str(e)})
+            
+            @self.web_server.route('/api/reload_properties')
+            @require_auth
+            def reload_properties():
+                """Reload properties from file"""
+                try:
+                    properties_file = os.path.join(self.server_directory, 'server.properties')
+                    if os.path.exists(properties_file):
+                        with open(properties_file, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                    else:
+                        content = "# Minecraft server properties\n# (File not found)\n"
+                    
+                    return jsonify({'success': True, 'content': content})
+                except Exception as e:
+                    return jsonify({'success': False, 'error': str(e)})
+            
+            @self.web_server.route('/api/reload_server', methods=['POST'])
+            @require_auth
+            def reload_server():
+                """Send reload command to server"""
+                try:
+                    if self.server_running:
+                        self.send_server_command("reload")
+                        return jsonify({'success': True})
+                    else:
+                        return jsonify({'success': False, 'error': 'Server is not running'})
+                except Exception as e:
+                    return jsonify({'success': False, 'error': str(e)})
+            
+            @self.web_server.route('/api/server_control', methods=['POST'])
+            @require_auth
+            def server_control():
+                """Handle server control actions"""
+                try:
+                    data = request.get_json()
+                    action = data.get('action')
+                    
+                    if action == 'start':
+                        if not self.server_running:
+                            self.start_server()
+                            return jsonify({'success': True, 'message': 'Server start command sent'})
+                        else:
+                            return jsonify({'success': False, 'error': 'Server is already running'})
+                    
+                    elif action == 'stop':
+                        if self.server_running:
+                            self.stop_server()
+                            return jsonify({'success': True, 'message': 'Server stop command sent'})
+                        else:
+                            return jsonify({'success': False, 'error': 'Server is not running'})
+                    
+                    elif action == 'restart':
+                        self.restart_server()
+                        return jsonify({'success': True, 'message': 'Server restart command sent'})
+                    
+                    elif action == 'kill':
+                        if self.server_running:
+                            self.kill_server()
+                            return jsonify({'success': True, 'message': 'Server kill command sent'})
+                        else:
+                            return jsonify({'success': False, 'error': 'Server is not running'})
+                    
+                    else:
+                        return jsonify({'success': False, 'error': 'Invalid action'})
+                
+                except Exception as e:
+                    return jsonify({'success': False, 'error': str(e)})
             
             # Socket.IO authentication helper
             def authenticate_socketio():
