@@ -100,6 +100,9 @@ class MinecraftServerWrapper:
         
         self.setup_ui()
         
+        # Check for existing Minecraft server processes
+        self.detect_running_server()
+        
         # Bind window close event to save configuration
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
@@ -495,6 +498,107 @@ class MinecraftServerWrapper:
         # Broadcast to web clients
         self.broadcast_console_output(formatted_message.strip())
     
+    def detect_running_server(self):
+        """Detect if there's already a running Minecraft server process and connect to it"""
+        try:
+            import psutil
+            
+            # Look for Java processes that might be Minecraft servers
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    if proc.info['name'] and 'java' in proc.info['name'].lower():
+                        cmdline = proc.info['cmdline']
+                        if cmdline:
+                            cmdline_str = ' '.join(cmdline)
+                            # Check if this looks like a Minecraft server
+                            if ('-jar' in cmdline_str and 
+                                ('server.jar' in cmdline_str.lower() or 
+                                 'minecraft' in cmdline_str.lower() or
+                                 'spigot' in cmdline_str.lower() or
+                                 'paper' in cmdline_str.lower() or
+                                 'forge' in cmdline_str.lower() or
+                                 'fabric' in cmdline_str.lower()) and
+                                'nogui' in cmdline_str):
+                                
+                                # Found a potential Minecraft server process
+                                pid = proc.info['pid']
+                                
+                                # Try to connect to this process
+                                try:
+                                    # Create a pseudo-process object to track this server
+                                    self.server_process = type('Process', (), {
+                                        'pid': pid,
+                                        'poll': lambda: None if psutil.pid_exists(pid) else 0,
+                                        'stdin': None,  # Can't send commands to external process
+                                        'kill': lambda: psutil.Process(pid).kill(),
+                                        'wait': lambda timeout=None: None
+                                    })()
+                                    
+                                    self.server_running = True
+                                    self.monitoring_active = True
+                                    self.update_ui_state()
+                                    
+                                    # Extract server JAR path if possible
+                                    jar_path = None
+                                    for i, arg in enumerate(cmdline):
+                                        if arg == '-jar' and i + 1 < len(cmdline):
+                                            jar_path = cmdline[i + 1]
+                                            break
+                                    
+                                    if jar_path and os.path.exists(jar_path):
+                                        self.jar_entry.delete(0, tk.END)
+                                        self.jar_entry.insert(0, jar_path)
+                                    
+                                    self.log_message(f"🔗 Connected to existing Minecraft server (PID: {pid})")
+                                    self.log_message("⚠️ Note: Command input is disabled for external processes")
+                                    
+                                    # Start monitoring this external process
+                                    threading.Thread(target=self.monitor_external_process, args=(pid,), daemon=True).start()
+                                    
+                                    return True
+                                    
+                                except Exception as e:
+                                    self.log_message(f"Failed to connect to process {pid}: {str(e)}")
+                                    continue
+                                    
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+                    
+        except ImportError:
+            self.log_message("psutil not available - cannot detect running servers")
+        except Exception as e:
+            self.log_message(f"Error detecting running server: {str(e)}")
+            
+        return False
+    
+    def monitor_external_process(self, pid):
+        """Monitor an external Minecraft server process"""
+        try:
+            import psutil
+            process = psutil.Process(pid)
+            
+            while self.server_running and psutil.pid_exists(pid):
+                try:
+                    # Check if process is still running
+                    if not process.is_running():
+                        break
+                        
+                    time.sleep(5)  # Check every 5 seconds
+                    
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    break
+                    
+            # Process has ended
+            if self.server_running:
+                self.server_running = False
+                self.server_process = None
+                self.monitoring_active = False
+                self.update_ui_state()
+                self.log_message("🔌 External Minecraft server process has ended")
+                
+        except Exception as e:
+            self.log_message(f"Error monitoring external process: {str(e)}")
+
     def start_server(self):
         """Start the Minecraft server"""
         if self.server_running:
@@ -565,6 +669,12 @@ class MinecraftServerWrapper:
             return
         
         try:
+            # Check if this is an external process (no stdin available)
+            if not hasattr(self.server_process, 'stdin') or self.server_process.stdin is None:
+                self.log_message("⚠️ Cannot gracefully stop external server process.")
+                self.log_message("Use 'Kill Server' to forcefully terminate external processes.")
+                return
+            
             # Send stop command
             self.server_process.stdin.write("stop\n")
             self.server_process.stdin.flush()
@@ -627,6 +737,13 @@ class MinecraftServerWrapper:
             
         if not self.server_running or not self.server_process:
             self.log_message("Server is not running. Cannot send command.")
+            return
+        
+        # Check if this is an external process (no stdin available)
+        if not hasattr(self.server_process, 'stdin') or self.server_process.stdin is None:
+            self.log_message("⚠️ Cannot send commands to external server process.")
+            self.log_message("Commands can only be sent to servers started through this wrapper.")
+            self.command_entry.delete(0, tk.END)
             return
             
         try:
