@@ -3683,13 +3683,13 @@ Created by: Aikar (Empire Minecraft)"""
                                         userCard.className = 'user-card';
                                         userCard.innerHTML = `
                                             <div class="user-info">
-                                                <strong>${user.username}</strong>
-                                                <div>Email: ${user.email || 'Not provided'}</div>
-                                                <div>Requested: ${new Date(user.requested_at).toLocaleString()}</div>
+                                                <strong>$${user.username}</strong>
+                                                <div>Email: $${user.email || 'Not provided'}</div>
+                                                <div>Requested: $${new Date(user.requested_at).toLocaleString()}</div>
                                             </div>
                                             <div class="user-actions">
-                                                <button class="action-btn approve" onclick="approveUser('${user.username}')">Approve</button>
-                                                <button class="action-btn reject" onclick="rejectUser('${user.username}')">Reject</button>
+                                                <button class="action-btn approve" onclick="approveUser('$${user.username}')">Approve</button>
+                                                <button class="action-btn reject" onclick="rejectUser('$${user.username}')">Reject</button>
                                             </div>
                                         `;
                                         container.appendChild(userCard);
@@ -3705,7 +3705,7 @@ Created by: Aikar (Empire Minecraft)"""
                     }
                     
                     function approveUser(username) {
-                        if (confirm(`Approve user "${username}"?`)) {
+                        if (confirm(`Approve user "$${username}"?`)) {
                             fetch('/api/admin/approve-user', {
                                 method: 'POST',
                                 headers: {
@@ -3716,10 +3716,10 @@ Created by: Aikar (Empire Minecraft)"""
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    alert(`User "${username}" approved successfully!`);
+                                    alert(`User "$${username}" approved successfully!`);
                                     loadPendingUsers(); // Refresh the list
                                 } else {
-                                    alert(`Error approving user: ${data.error}`);
+                                    alert(`Error approving user: $${data.error}`);
                                 }
                             })
                             .catch(error => {
@@ -3730,7 +3730,7 @@ Created by: Aikar (Empire Minecraft)"""
                     }
                     
                     function rejectUser(username) {
-                        if (confirm(`Reject user "${username}"? This action cannot be undone.`)) {
+                        if (confirm(`Reject user "$${username}"? This action cannot be undone.`)) {
                             fetch('/api/admin/reject-user', {
                                 method: 'POST',
                                 headers: {
@@ -3741,10 +3741,10 @@ Created by: Aikar (Empire Minecraft)"""
                             .then(response => response.json())
                             .then(data => {
                                 if (data.success) {
-                                    alert(`User "${username}" rejected successfully!`);
+                                    alert(`User "$${username}" rejected successfully!`);
                                     loadPendingUsers(); // Refresh the list
                                 } else {
-                                    alert(`Error rejecting user: ${data.error}`);
+                                    alert(`Error rejecting user: $${data.error}`);
                                 }
                             })
                             .catch(error => {
@@ -3786,10 +3786,10 @@ Created by: Aikar (Empire Minecraft)"""
                             sidebarTps.className = 'monitor-value ' + (tpsValue >= 19 ? 'good' : tpsValue >= 15 ? 'warning' : 'critical');
                             
                             // Update Players
-                            const currentPlayers = parseInt(data.current_players || data.players || '0');
-                            const maxPlayers = parseInt(data.max_players || '20');
-                            sidebarPlayers.textContent = `${currentPlayers}/${maxPlayers}`;
-                            sidebarPlayers.className = 'monitor-value good';
+            const currentPlayers = parseInt(data.current_players || data.players || '0');
+            const maxPlayers = parseInt(data.max_players || '20');
+            sidebarPlayers.textContent = `$${currentPlayers}/$${maxPlayers}`;
+            sidebarPlayers.className = 'monitor-value good';
                         } else {
                             statusIndicator.classList.remove('online');
                             sidebarCpu.textContent = '0%';
@@ -3820,12 +3820,12 @@ Created by: Aikar (Empire Minecraft)"""
                                         pluginItem.innerHTML = `
                                             <div class="plugin-info">
                                                 <div class="plugin-name">
-                                                    <span class="plugin-status ${plugin.enabled ? 'enabled' : 'disabled'}"></span>
-                                                    ${plugin.name}
+                                                    <span class="plugin-status $${plugin.enabled ? 'enabled' : 'disabled'}"></span>
+                                                    $${plugin.name}
                                                 </div>
-                                                <div class="plugin-version">${plugin.version || 'Unknown'}</div>
+                                                <div class="plugin-version">$${plugin.version || 'Unknown'}</div>
                                             </div>
-                                            <button class="plugin-config-btn" onclick="configurePlugin('${plugin.name}')">Config</button>
+                                            <button class="plugin-config-btn" onclick="configurePlugin('$${plugin.name}')">Config</button>
                                         `;
                                         container.appendChild(pluginItem);
                                     });
@@ -3847,7 +3847,7 @@ Created by: Aikar (Empire Minecraft)"""
                         modal.innerHTML = `
                             <div class="modal-content" style="width: 80%; max-width: 800px;">
                                 <div class="modal-header">
-                                    <h3>🔧 Configure ${pluginName}</h3>
+                                    <h3>🔧 Configure $${pluginName}</h3>
                                     <button class="modal-close" onclick="closePluginConfig()">✖️</button>
                                 </div>
                                 <div style="margin-bottom: 15px;">
@@ -3855,14 +3855,14 @@ Created by: Aikar (Empire Minecraft)"""
                                 </div>
                                 <div style="text-align: right;">
                                     <button class="btn" onclick="closePluginConfig()">Cancel</button>
-                                    <button class="btn save" onclick="savePluginConfig('${pluginName}')">💾 Save Config</button>
+                                    <button class="btn save" onclick="savePluginConfig('$${pluginName}')">💾 Save Config</button>
                                 </div>
                             </div>
                         `;
                         document.body.appendChild(modal);
                         
                         // Load plugin configuration
-                        fetch(`/api/plugins/${pluginName}/config`)
+                        fetch(`/api/plugins/$${pluginName}/config`)
                             .then(response => response.json())
                             .then(data => {
                                 const editor = document.getElementById('pluginConfigEditor');
@@ -3890,7 +3890,7 @@ Created by: Aikar (Empire Minecraft)"""
                     function savePluginConfig(pluginName) {
                         const content = document.getElementById('pluginConfigEditor').value;
                         
-                        fetch(`/api/plugins/${pluginName}/config`, {
+                        fetch(`/api/plugins/$${pluginName}/config`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -4707,7 +4707,7 @@ Created by: Aikar (Empire Minecraft)"""
                     
                     function loadFiles(path = '.') {
                         currentPath = path;
-                        fetch(`/api/files?path=${encodeURIComponent(path)}`)
+                        fetch(`/api/files?path=$${encodeURIComponent(path)}`)
                             .then(response => response.json())
                             .then(data => {
                                 if (data.error) {
@@ -4787,7 +4787,7 @@ Created by: Aikar (Empire Minecraft)"""
                         currentFile = filepath;
                         document.getElementById('editor-filename').textContent = filename;
                         
-                        fetch(`/api/file/${encodeURIComponent(filepath)}`)
+                        fetch(`/api/file/$${encodeURIComponent(filepath)}`)
                             .then(response => response.json())
                             .then(data => {
                                 if (data.error) {
@@ -4816,7 +4816,7 @@ Created by: Aikar (Empire Minecraft)"""
                         
                         const content = document.getElementById('editor-textarea').value;
                         
-                        fetch(`/api/file/${encodeURIComponent(currentFile)}`, {
+                        fetch(`/api/file/$${encodeURIComponent(currentFile)}`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -4843,7 +4843,7 @@ Created by: Aikar (Empire Minecraft)"""
                             return;
                         }
                         
-                        window.open(`/download/${encodeURIComponent(currentFile)}`, '_blank');
+                        window.open(`/download/$${encodeURIComponent(currentFile)}`, '_blank');
                     }
                     
                     function closeEditor() {
@@ -4888,7 +4888,7 @@ Created by: Aikar (Empire Minecraft)"""
                          const fullPath = currentPath === '.' ? fileName : currentPath + '/' + fileName;
                          
                          // Create empty file
-                         fetch(`/api/file/${encodeURIComponent(fullPath)}`, {
+                         fetch(`/api/file/$${encodeURIComponent(fullPath)}`, {
                              method: 'POST',
                              headers: {
                                  'Content-Type': 'application/json',
@@ -5061,7 +5061,7 @@ Created by: Aikar (Empire Minecraft)"""
                          const filePath = selectedFile.dataset.path;
                          
                          if (confirm(`Are you sure you want to delete "${fileName}"?`)) {
-                             fetch(`/api/file/${encodeURIComponent(filePath)}`, {
+                             fetch(`/api/file/$${encodeURIComponent(filePath)}`, {
                                  method: 'DELETE'
                              })
                              .then(response => response.json())
