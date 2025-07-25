@@ -482,6 +482,9 @@ class MinecraftServerWrapper:
         timestamp = time.strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}"
         
+        # Add to console history for web interface
+        self.add_to_console_history(message)
+        
         def update_console():
             self.console_output.insert(tk.END, formatted_message + "\\n")
             self.console_output.see(tk.END)
@@ -761,6 +764,16 @@ class MinecraftServerWrapper:
                     .console::-webkit-scrollbar-thumb {
                         background: #555;
                         border-radius: 4px;
+                    }
+                    
+                    .console-line {
+                        margin-bottom: 2px;
+                        word-wrap: break-word;
+                    }
+                    
+                    .console-timestamp {
+                        color: #888;
+                        margin-right: 5px;
                     }
                     
                     .command-input {
@@ -1202,9 +1215,47 @@ class MinecraftServerWrapper:
                         }
                     }
                     
+                    function loadConsole() {
+                        fetch('/api/console')
+                            .then(response => response.json())
+                            .then(data => {
+                                const console = document.getElementById('console');
+                                
+                                if (data.error) {
+                                    console.innerHTML = `<div style="color: #e74c3c;">Error: ${data.error}</div>`;
+                                    return;
+                                }
+                                
+                                // Clear console and add new logs
+                                console.innerHTML = '';
+                                
+                                if (data.logs && data.logs.length > 0) {
+                                    data.logs.forEach(log => {
+                                        const logEntry = document.createElement('div');
+                                        logEntry.className = 'console-line';
+                                        logEntry.innerHTML = `<span class="console-timestamp">[${log.timestamp}]</span> ${log.message}`;
+                                        console.appendChild(logEntry);
+                                    });
+                                    
+                                    // Auto-scroll to bottom
+                                    console.scrollTop = console.scrollHeight;
+                                } else {
+                                    console.innerHTML = '<div style="color: #888;">No console output yet...</div>';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error loading console:', error);
+                                document.getElementById('console').innerHTML = '<div style="color: #e74c3c;">Error loading console output</div>';
+                            });
+                    }
+                    
                     // Update status every 5 seconds
                     setInterval(updateStatus, 5000);
                     updateStatus();
+                    
+                    // Update console every 3 seconds
+                    setInterval(loadConsole, 3000);
+                    loadConsole();
                     
                     // Load initial files
                     loadFiles();
@@ -1273,6 +1324,16 @@ class MinecraftServerWrapper:
                 return jsonify({'message': 'Command sent'})
             except Exception as e:
                 return jsonify({'error': f'Failed to send command: {str(e)}'})
+        
+        @self.web_server.route('/api/console')
+        def api_console():
+            """Get recent console output"""
+            try:
+                # Get the last 100 console entries
+                recent_logs = self.console_history[-100:] if len(self.console_history) > 100 else self.console_history
+                return jsonify({'logs': recent_logs})
+            except Exception as e:
+                return jsonify({'error': f'Failed to get console logs: {str(e)}'})
         
         @self.web_server.route('/api/files')
         def api_files():
