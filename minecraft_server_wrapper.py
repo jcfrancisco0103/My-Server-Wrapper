@@ -1311,11 +1311,8 @@ These optimizations can significantly improve server TPS and reduce lag."""
             "-Daikars.enhanced.flags=true"
         ]
         
-        # Add memory-specific optimizations
-        if max_mem_value >= 4:  # 4GB or more
-            flags.extend([
-                "-XX:+AggressiveOpts"
-            ])
+        # Memory-specific optimizations are now removed to ensure compatibility
+        # with all Java versions and prevent startup errors
         
         return flags
     
