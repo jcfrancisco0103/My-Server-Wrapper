@@ -22,5 +22,13 @@
     "timestamp": "15:35:16",
     "message": "Web interface started on port 5000",
     "time": 1753515316.338908
+  },
+  {
+    "timestamp": "07:32:02",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "07:32:49",
+    "message": "Web interface started on http://localhost:5000"
   }
 ]

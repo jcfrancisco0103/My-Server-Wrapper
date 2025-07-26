@@ -76,7 +76,7 @@ if [ -f "server.jar" ]; then
 # Minecraft Server Properties (ARM64 Optimized)
 server-port=25565
 max-players=10
-online-mode=true
+online-mode=false
 white-list=false
 spawn-protection=16
 max-world-size=29999984

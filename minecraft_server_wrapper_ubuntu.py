@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Minecraft Server Wrapper for ARM64 Ubuntu (Termux)
+Complete feature parity with Windows version
 Optimized for headless operation with web interface
 """
 
@@ -13,6 +14,11 @@ import subprocess
 import signal
 import argparse
 from datetime import datetime
+import webbrowser
+import re
+import hashlib
+import secrets
+import shutil
 
 # Optional GUI imports - will run headless if not available
 GUI_AVAILABLE = False
@@ -22,18 +28,20 @@ try:
     GUI_AVAILABLE = True
 except ImportError:
     print("GUI not available - running in headless mode")
-    GUI_AVAILABLE = False
 
+# Web server imports
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file
 from flask_socketio import SocketIO, emit
 from werkzeug.serving import make_server
+import psutil
 
 class MinecraftServerWrapper:
-    def __init__(self, headless=False):
+    def __init__(self, root=None, headless=False, port=5000):
         self.headless = headless or not GUI_AVAILABLE
+        self.web_port = port
         
         if not self.headless and GUI_AVAILABLE:
-            self.root = tk.Tk()
+            self.root = root
             self.root.title("Minecraft Server Wrapper - Ubuntu ARM64")
             self.root.geometry("800x600")
             self.root.configure(bg="#2c3e50")
@@ -48,8 +56,7 @@ class MinecraftServerWrapper:
             self.console_font = ("Ubuntu Mono", 10)
         else:
             self.root = None
-            print("Running in headless mode - access via web interface")
-        
+            
         # Server process
         self.server_process = None
         self.server_running = False
@@ -74,7 +81,7 @@ class MinecraftServerWrapper:
         self.web_server = None
         self.web_server_thread = None
         self.web_server_running = False
-        self.web_port = 5000
+        self.socketio = None
         
         # Configuration
         self.config_file = "server_config.json"
@@ -86,20 +93,22 @@ class MinecraftServerWrapper:
         self.console_history_file = "console_history.json"
         self.load_console_history()
         
-        # Set remote access settings
-        self.web_port = self.config.get("web_port", 5000)
-        
-        if not self.headless:
+        # GUI variables (only if GUI available)
+        if not self.headless and GUI_AVAILABLE:
+            self.startup_enabled_var = tk.BooleanVar()
+            self.remote_access_enabled = tk.BooleanVar()
+            self.startup_enabled_var.set(False)  # Ubuntu doesn't use Windows startup
+            self.remote_access_enabled.set(True)
             self.setup_ui()
             # Bind window close event to save configuration
             self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # Start web server automatically
-        self.start_web_server()
-        
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
+        
+        # Start web server automatically
+        self.start_web_server()
         
     def signal_handler(self, signum, frame):
         """Handle system signals for graceful shutdown"""
@@ -118,7 +127,7 @@ class MinecraftServerWrapper:
             "use_aikars_flags": False,
             "auto_start_server": False,
             "remote_access_enabled": True,
-            "web_port": 5000
+            "web_port": self.web_port
         }
         
         try:
@@ -137,7 +146,7 @@ class MinecraftServerWrapper:
                 json.dump(self.config, f, indent=4)
         except Exception as e:
             print(f"Failed to save config: {str(e)}")
-            if not self.headless:
+            if not self.headless and GUI_AVAILABLE:
                 messagebox.showerror("Error", f"Failed to save config: {str(e)}")
     
     def load_console_history(self):
@@ -175,6 +184,10 @@ class MinecraftServerWrapper:
         
         if len(self.console_history) > self.max_console_history:
             self.console_history = self.console_history[-self.max_console_history:]
+        
+        # Emit to web clients via SocketIO
+        if self.socketio:
+            self.socketio.emit('console_update', entry)
         
         if len(self.console_history) % 10 == 0:
             self.save_console_history()
@@ -297,7 +310,7 @@ class MinecraftServerWrapper:
         
         send_button = tk.Button(command_frame, text="Send", command=self.send_command,
                                bg="#3498db", fg="white", font=self.button_font)
-        send_button.pack(side=tk.RIGHT)
+        send_button.pack(side=tk.LEFT)
         
         # Load configuration into UI
         self.load_config_to_ui()
@@ -328,198 +341,215 @@ class MinecraftServerWrapper:
         if filename:
             self.jar_entry.delete(0, tk.END)
             self.jar_entry.insert(0, filename)
+            self.config["server_jar"] = filename
+            self.save_config()
     
     def start_server(self):
         """Start the Minecraft server"""
         if self.server_running:
             print("Warning: Server is already running!")
-            if not self.headless:
+            if not self.headless and GUI_AVAILABLE:
                 messagebox.showwarning("Warning", "Server is already running!")
             return
         
         # Get configuration
         server_jar = self.config.get("server_jar", "")
-        if not self.headless:
+        if not self.headless and GUI_AVAILABLE:
             server_jar = self.jar_entry.get() if self.jar_entry.get() else server_jar
         
         if not server_jar:
             print("Error: Please select a server JAR file!")
-            if not self.headless:
+            if not self.headless and GUI_AVAILABLE:
                 messagebox.showerror("Error", "Please select a server JAR file!")
             return
         
         if not os.path.exists(server_jar):
-            print("Error: Server JAR file not found!")
-            if not self.headless:
+            print(f"Error: Server JAR file not found: {server_jar}")
+            if not self.headless and GUI_AVAILABLE:
                 messagebox.showerror("Error", "Server JAR file not found!")
             return
         
+        # Get memory settings
+        min_memory = self.config.get("memory_min", "1G")
+        max_memory = self.config.get("memory_max", "2G")
+        
+        if not self.headless and GUI_AVAILABLE:
+            min_memory = self.min_memory_entry.get() if self.min_memory_entry.get() else min_memory
+            max_memory = self.max_memory_entry.get() if self.max_memory_entry.get() else max_memory
+        
         # Update config with current values
-        if not self.headless:
-            self.config["server_jar"] = self.jar_entry.get()
-            self.config["memory_min"] = self.min_memory_entry.get()
-            self.config["memory_max"] = self.max_memory_entry.get()
+        self.config["server_jar"] = server_jar
+        self.config["memory_min"] = min_memory
+        self.config["memory_max"] = max_memory
+        self.save_config()
+        
+        # Build command
+        java_path = self.config.get("java_path", "java")
+        additional_args = self.config.get("additional_args", "")
+        use_aikars_flags = self.config.get("use_aikars_flags", False)
+        
+        cmd = [java_path]
+        
+        # Add memory settings
+        cmd.extend([f"-Xms{min_memory}", f"-Xmx{max_memory}"])
+        
+        # Add Aikar's flags if enabled (ARM64 optimized)
+        if use_aikars_flags:
+            aikars_flags = [
+                "-XX:+UseG1GC",
+                "-XX:+ParallelRefProcEnabled",
+                "-XX:MaxGCPauseMillis=200",
+                "-XX:+UnlockExperimentalVMOptions",
+                "-XX:+DisableExplicitGC",
+                "-XX:+AlwaysPreTouch",
+                "-XX:G1NewSizePercent=30",
+                "-XX:G1MaxNewSizePercent=40",
+                "-XX:G1HeapRegionSize=8M",
+                "-XX:G1ReservePercent=20",
+                "-XX:G1HeapWastePercent=5",
+                "-XX:G1MixedGCCountTarget=4",
+                "-XX:InitiatingHeapOccupancyPercent=15",
+                "-XX:G1MixedGCLiveThresholdPercent=90",
+                "-XX:G1RSetUpdatingPauseTimePercent=5",
+                "-XX:SurvivorRatio=32",
+                "-XX:+PerfDisableSharedMem",
+                "-XX:MaxTenuringThreshold=1",
+                "-Dusing.aikars.flags=https://mcflags.emc.gs",
+                "-Daikars.new.flags=true"
+            ]
+            cmd.extend(aikars_flags)
+        
+        # Add additional arguments
+        if additional_args:
+            cmd.extend(additional_args.split())
+        
+        # Add JAR and nogui
+        cmd.extend(["-jar", server_jar, "nogui"])
         
         try:
-            # Build Java command
-            java_path = self.config.get("java_path", "java")
-            memory_min = self.config.get("memory_min", "1G")
-            memory_max = self.config.get("memory_max", "2G")
-            additional_args = self.config.get("additional_args", "")
-            
-            # Use Aikar's flags for better performance on ARM64
-            if self.config.get("use_aikars_flags", False):
-                jvm_args = [
-                    f"-Xms{memory_min}",
-                    f"-Xmx{memory_max}",
-                    "-XX:+UseG1GC",
-                    "-XX:+ParallelRefProcEnabled",
-                    "-XX:MaxGCPauseMillis=200",
-                    "-XX:+UnlockExperimentalVMOptions",
-                    "-XX:+DisableExplicitGC",
-                    "-XX:+AlwaysPreTouch",
-                    "-XX:G1NewSizePercent=30",
-                    "-XX:G1MaxNewSizePercent=40",
-                    "-XX:G1HeapRegionSize=8M",
-                    "-XX:G1ReservePercent=20",
-                    "-XX:G1HeapWastePercent=5",
-                    "-XX:G1MixedGCCountTarget=4",
-                    "-XX:InitiatingHeapOccupancyPercent=15",
-                    "-XX:G1MixedGCLiveThresholdPercent=90",
-                    "-XX:G1RSetUpdatingPauseTimePercent=5",
-                    "-XX:SurvivorRatio=32",
-                    "-XX:+PerfDisableSharedMem",
-                    "-XX:MaxTenuringThreshold=1"
-                ]
-            else:
-                jvm_args = [f"-Xms{memory_min}", f"-Xmx{memory_max}"]
-            
-            # Add additional arguments
-            if additional_args:
-                jvm_args.extend(additional_args.split())
-            
-            # Build command
-            cmd = [java_path] + jvm_args + ["-jar", server_jar, "nogui"]
-            
-            print(f"Starting server with command: {' '.join(cmd)}")
-            self.log_message(f"Starting server: {' '.join(cmd)}")
+            # Change to server directory
+            server_dir = os.path.dirname(os.path.abspath(server_jar))
             
             # Start server process
             self.server_process = subprocess.Popen(
                 cmd,
+                cwd=server_dir,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                cwd=os.path.dirname(server_jar) if os.path.dirname(server_jar) else "."
+                universal_newlines=True
             )
             
             self.server_running = True
             self.server_start_time = time.time()
             
-            # Start monitoring thread
-            self.monitor_thread = threading.Thread(target=self.monitor_output, daemon=True)
-            self.monitor_thread.start()
+            # Start output monitoring thread
+            self.output_thread = threading.Thread(target=self.monitor_server_output, daemon=True)
+            self.output_thread.start()
             
-            self.log_message("Server started successfully!")
-            self.update_ui_state()
+            self.log_message("Server starting...")
+            print(f"Server started with PID: {self.server_process.pid}")
+            
+            if not self.headless and GUI_AVAILABLE:
+                self.status_label.config(text="Status: Starting...")
             
         except Exception as e:
             error_msg = f"Failed to start server: {str(e)}"
-            print(f"Error: {error_msg}")
-            self.log_message(f"Error: {error_msg}")
-            if not self.headless:
+            print(error_msg)
+            self.log_message(error_msg)
+            if not self.headless and GUI_AVAILABLE:
                 messagebox.showerror("Error", error_msg)
     
     def stop_server(self):
         """Stop the Minecraft server with improved shutdown process"""
         if not self.server_running:
-            print("Warning: Server is not running!")
-            if not self.headless:
-                messagebox.showwarning("Warning", "Server is not running!")
+            print("Server is not running")
             return
         
+        self.log_message("Stopping server...")
+        print("Stopping server...")
+        
         try:
-            self.log_message("Stopping server...")
-            print("Stopping server...")
-            
-            # Send stop command to server
-            if self.server_process and self.server_process.stdin:
+            if self.server_process and self.server_process.poll() is None:
+                # Send stop command first
                 self.server_process.stdin.write("stop\n")
                 self.server_process.stdin.flush()
                 self.log_message("Stop command sent to server")
-            
-            # Wait for graceful shutdown (reduced timeout for ARM64)
-            self.log_message("Waiting for graceful shutdown...")
-            try:
-                self.server_process.wait(timeout=15)
-                self.log_message("Server stopped gracefully")
-            except subprocess.TimeoutExpired:
-                self.log_message("Graceful shutdown timeout, attempting force termination...")
                 
-                # First attempt: SIGTERM
-                self.server_process.terminate()
+                # Wait for graceful shutdown (reduced timeout for ARM64)
                 try:
-                    self.server_process.wait(timeout=5)
-                    self.log_message("Server terminated successfully")
+                    self.server_process.wait(timeout=15)
+                    self.log_message("Server stopped gracefully")
                 except subprocess.TimeoutExpired:
-                    # Final attempt: SIGKILL
-                    self.log_message("Force killing server process...")
-                    self.server_process.kill()
-                    self.server_process.wait()
-                    self.log_message("Server process killed")
+                    self.log_message("Server did not stop gracefully, attempting force termination...")
+                    
+                    # First attempt: SIGTERM
+                    try:
+                        self.server_process.terminate()
+                        self.server_process.wait(timeout=5)
+                        self.log_message("Server terminated with SIGTERM")
+                    except subprocess.TimeoutExpired:
+                        # Final attempt: SIGKILL
+                        self.log_message("Force killing server process...")
+                        self.server_process.kill()
+                        self.server_process.wait()
+                        self.log_message("Server process killed")
             
             self.server_running = False
             self.server_process = None
             self.server_start_time = None
+            self.current_players = 0
+            self.player_list.clear()
             
             # Save console history and configuration immediately
             self.save_console_history()
             self.save_config()
             
-            self.log_message("Server stopped successfully!")
-            self.update_ui_state()
+            if not self.headless and GUI_AVAILABLE:
+                self.status_label.config(text="Status: Stopped")
+            
+            print("Server stopped successfully")
             
         except Exception as e:
-            error_msg = f"Failed to stop server: {str(e)}"
-            print(f"Error: {error_msg}")
-            self.log_message(f"Error: {error_msg}")
+            error_msg = f"Error stopping server: {str(e)}"
+            print(error_msg)
+            self.log_message(error_msg)
     
     def restart_server(self):
         """Restart the Minecraft server"""
-        if self.server_running:
-            self.stop_server()
-            # Wait a moment for cleanup
-            time.sleep(2)
+        self.log_message("Restarting server...")
+        self.stop_server()
+        time.sleep(2)  # Brief pause
         self.start_server()
     
     def send_command(self, command=None):
-        """Send command to the server"""
+        """Send command to server"""
         if not self.server_running:
-            print("Warning: Server is not running!")
-            if not self.headless:
-                messagebox.showwarning("Warning", "Server is not running!")
+            print("Server is not running")
+            return
+        
+        if command is None:
+            if self.headless or not GUI_AVAILABLE:
+                return
+            command = self.command_entry.get().strip()
+            self.command_entry.delete(0, tk.END)
+        
+        if not command:
             return
         
         try:
-            if command is None and not self.headless:
-                command = self.command_entry.get()
-            
-            if command and self.server_process and self.server_process.stdin:
-                self.server_process.stdin.write(command + "\n")
-                self.server_process.stdin.flush()
-                self.log_message(f"Command sent: {command}")
-                
-                if not self.headless:
-                    self.command_entry.delete(0, tk.END)
+            self.server_process.stdin.write(command + "\n")
+            self.server_process.stdin.flush()
+            self.log_message(f"[COMMAND] {command}")
         except Exception as e:
             error_msg = f"Failed to send command: {str(e)}"
-            print(f"Error: {error_msg}")
-            self.log_message(f"Error: {error_msg}")
+            print(error_msg)
+            self.log_message(error_msg)
     
-    def monitor_output(self):
-        """Monitor server output"""
+    def monitor_server_output(self):
+        """Monitor server output in a separate thread"""
         while self.server_running and self.server_process:
             try:
                 line = self.server_process.stdout.readline()
@@ -528,130 +558,137 @@ class MinecraftServerWrapper:
                     self.log_message(line)
                     self.parse_server_output(line)
                 elif self.server_process.poll() is not None:
-                    # Process has ended
                     break
             except Exception as e:
-                print(f"Error monitoring output: {e}")
+                print(f"Error reading server output: {e}")
                 break
         
         # Server process ended
         if self.server_running:
             self.server_running = False
             self.log_message("Server process ended unexpectedly")
-            self.update_ui_state()
+            if not self.headless and GUI_AVAILABLE:
+                self.status_label.config(text="Status: Stopped (Unexpected)")
     
     def parse_server_output(self, line):
-        """Parse server output for player events and other information"""
+        """Parse server output for player events and status"""
         # Player join detection
-        if "joined the game" in line:
-            # Extract player name (basic parsing)
-            parts = line.split()
-            for i, part in enumerate(parts):
-                if part == "joined":
-                    if i > 0:
-                        player_name = parts[i-1].split("]")[-1].strip()
-                        self.player_list.add(player_name)
-                        self.current_players = len(self.player_list)
-                        break
+        join_patterns = [
+            r"(\w+) joined the game",
+            r"(\w+)\[.*\] logged in"
+        ]
+        
+        for pattern in join_patterns:
+            match = re.search(pattern, line)
+            if match:
+                player = match.group(1)
+                self.player_list.add(player)
+                self.current_players = len(self.player_list)
+                break
         
         # Player leave detection
-        elif "left the game" in line:
-            # Extract player name (basic parsing)
-            parts = line.split()
-            for i, part in enumerate(parts):
-                if part == "left":
-                    if i > 0:
-                        player_name = parts[i-1].split("]")[-1].strip()
-                        self.player_list.discard(player_name)
-                        self.current_players = len(self.player_list)
-                        break
+        leave_patterns = [
+            r"(\w+) left the game",
+            r"(\w+) lost connection"
+        ]
+        
+        for pattern in leave_patterns:
+            match = re.search(pattern, line)
+            if match:
+                player = match.group(1)
+                self.player_list.discard(player)
+                self.current_players = len(self.player_list)
+                break
+        
+        # Server ready detection
+        if "Done" in line and "For help, type" in line:
+            if not self.headless and GUI_AVAILABLE:
+                self.status_label.config(text="Status: Running")
     
     def log_message(self, message):
-        """Log message to console and history"""
+        """Log message to console"""
         timestamp = time.strftime("%H:%M:%S")
         formatted_message = f"[{timestamp}] {message}"
         
-        # Add to console history
+        # Add to console history for web interface
         self.add_to_console_history(message)
         
-        # Update GUI console if available
-        if not self.headless and hasattr(self, 'console_output'):
-            self.console_output.config(state=tk.NORMAL)
-            self.console_output.insert(tk.END, formatted_message + "\n")
-            self.console_output.see(tk.END)
-            self.console_output.config(state=tk.DISABLED)
-        
-        # Print to stdout for headless mode
+        # Print to terminal
         print(formatted_message)
-    
-    def update_ui_state(self):
-        """Update UI button states"""
-        if self.headless or not GUI_AVAILABLE:
-            return
+        
+        # Update GUI console if available
+        if not self.headless and GUI_AVAILABLE and hasattr(self, 'console_output'):
+            def update_console():
+                self.console_output.config(state=tk.NORMAL)
+                self.console_output.insert(tk.END, formatted_message + "\n")
+                self.console_output.see(tk.END)
+                self.console_output.config(state=tk.DISABLED)
             
-        if self.server_running:
-            self.start_button.config(state=tk.DISABLED)
-            self.stop_button.config(state=tk.NORMAL)
-            self.restart_button.config(state=tk.NORMAL)
-            self.status_label.config(text="Status: Running", fg="#27ae60")
-        else:
-            self.start_button.config(state=tk.NORMAL)
-            self.stop_button.config(state=tk.DISABLED)
-            self.restart_button.config(state=tk.DISABLED)
-            self.status_label.config(text="Status: Stopped", fg="#e74c3c")
+            if threading.current_thread() == threading.main_thread():
+                update_console()
+            else:
+                self.root.after(0, update_console)
     
-    # Web server and API methods (same as original but with headless support)
     def start_web_server(self):
-        """Start the web server for remote access"""
+        """Start the web server"""
         if self.web_server_running:
             return
         
         try:
-            self.app = Flask(__name__)
-            self.app.secret_key = os.urandom(24)
-            self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+            self.web_server = Flask(__name__)
+            self.web_server.config['SECRET_KEY'] = secrets.token_hex(16)
             
-            self.setup_routes()
+            # Initialize SocketIO
+            self.socketio = SocketIO(self.web_server, cors_allowed_origins="*")
             self.setup_socketio_events()
+            self.setup_web_routes()
             
             # Start server in a separate thread
             self.web_server_thread = threading.Thread(
-                target=self.run_web_server, 
+                target=lambda: self.socketio.run(
+                    self.web_server, 
+                    host='0.0.0.0', 
+                    port=self.web_port, 
+                    debug=False,
+                    allow_unsafe_werkzeug=True
+                ),
                 daemon=True
             )
             self.web_server_thread.start()
-            
             self.web_server_running = True
+            
             print(f"Web server started on http://0.0.0.0:{self.web_port}")
-            self.log_message(f"Web server started on port {self.web_port}")
+            print(f"Access locally: http://localhost:{self.web_port}")
             
         except Exception as e:
-            error_msg = f"Failed to start web server: {str(e)}"
-            print(f"Error: {error_msg}")
-            self.log_message(f"Error: {error_msg}")
+            print(f"Failed to start web server: {e}")
     
-    def run_web_server(self):
-        """Run the web server"""
-        try:
-            self.socketio.run(
-                self.app, 
-                host='0.0.0.0', 
-                port=self.web_port, 
-                debug=False,
-                allow_unsafe_werkzeug=True
-            )
-        except Exception as e:
-            print(f"Web server error: {e}")
-    
-    def setup_routes(self):
-        """Setup Flask routes"""
-        @self.app.route('/')
-        def index():
-            return self.render_web_interface()
+    def setup_socketio_events(self):
+        """Setup SocketIO events for real-time updates"""
+        @self.socketio.on('connect')
+        def handle_connect():
+            print('Client connected to SocketIO')
+            # Send recent console history to new client
+            recent_logs = self.console_history[-50:] if len(self.console_history) > 50 else self.console_history
+            emit('console_history', recent_logs)
         
-        @self.app.route('/api/status')
+        @self.socketio.on('disconnect')
+        def handle_disconnect():
+            print('Client disconnected from SocketIO')
+    
+    def setup_web_routes(self):
+        """Setup web routes"""
+        @self.web_server.route('/')
+        def index():
+            return self.get_web_interface()
+        
+        @self.web_server.route('/api/status')
         def api_status():
-            uptime = int(time.time() - self.server_start_time) if self.server_start_time else 0
+            """Get server status"""
+            uptime = 0
+            if self.server_running and self.server_start_time:
+                uptime = int(time.time() - self.server_start_time)
+            
             return jsonify({
                 'running': self.server_running,
                 'players': self.current_players,
@@ -660,645 +697,190 @@ class MinecraftServerWrapper:
                 'player_list': list(self.player_list)
             })
         
-        @self.app.route('/api/console')
-        def api_console():
-            return jsonify({
-                'history': self.console_history[-100:],  # Last 100 messages
-                'total': len(self.console_history)
-            })
-        
-        @self.app.route('/api/command', methods=['POST'])
-        def api_command():
-            if not self.server_running:
-                return jsonify({'success': False, 'message': 'Server is not running'})
+        @self.web_server.route('/api/start', methods=['POST'])
+        def api_start():
+            if self.server_running:
+                return jsonify({'message': 'Server is already running'})
             
+            # Start server in main thread if GUI available, otherwise directly
+            if not self.headless and GUI_AVAILABLE and self.root:
+                self.root.after(0, self.start_server)
+            else:
+                threading.Thread(target=self.start_server, daemon=True).start()
+            
+            return jsonify({'message': 'Starting server...'})
+        
+        @self.web_server.route('/api/stop', methods=['POST'])
+        def api_stop():
+            if not self.server_running:
+                return jsonify({'message': 'Server is not running'})
+            
+            if not self.headless and GUI_AVAILABLE and self.root:
+                self.root.after(0, self.stop_server)
+            else:
+                threading.Thread(target=self.stop_server, daemon=True).start()
+            
+            return jsonify({'message': 'Stopping server...'})
+        
+        @self.web_server.route('/api/restart', methods=['POST'])
+        def api_restart():
+            if not self.headless and GUI_AVAILABLE and self.root:
+                self.root.after(0, self.restart_server)
+            else:
+                threading.Thread(target=self.restart_server, daemon=True).start()
+            
+            return jsonify({'message': 'Restarting server...'})
+        
+        @self.web_server.route('/api/kill', methods=['POST'])
+        def api_kill():
+            try:
+                if self.server_process and self.server_process.poll() is None:
+                    self.server_process.kill()
+                    self.server_running = False
+                    self.log_message("Server process forcefully terminated")
+                    return jsonify({'message': 'Server killed successfully'})
+                else:
+                    return jsonify({'message': 'No server process to kill'})
+            except Exception as e:
+                return jsonify({'error': f'Failed to kill server: {str(e)}'})
+        
+        @self.web_server.route('/api/command', methods=['POST'])
+        def api_command():
             data = request.get_json()
             command = data.get('command', '').strip()
             
             if not command:
-                return jsonify({'success': False, 'message': 'No command provided'})
+                return jsonify({'error': 'No command provided'})
+            
+            if not self.server_running:
+                return jsonify({'error': 'Server is not running'})
             
             try:
-                # Check if server process is still alive
+                # Ensure the server process is still alive
                 if not self.server_process or self.server_process.poll() is not None:
-                    return jsonify({'success': False, 'message': 'Server process is not responding'})
+                    return jsonify({'error': 'Server process is not available'})
                 
                 # Send command to server
                 self.server_process.stdin.write(command + "\n")
                 self.server_process.stdin.flush()
                 
-                # Log the command execution
-                self.log_message(f"Command executed: {command}")
+                # Log the command
+                self.log_message(f"[WEB] {command}")
                 
-                return jsonify({'success': True, 'message': 'Command executed'})
+                return jsonify({'message': 'Command executed'})
             except Exception as e:
-                error_msg = f"Failed to execute command: {str(e)}"
-                self.log_message(f"Error: {error_msg}")
-                return jsonify({'success': False, 'message': error_msg})
+                return jsonify({'error': f'Failed to send command: {str(e)}'})
         
-        @self.app.route('/api/start', methods=['POST'])
-        def api_start():
-            self.start_server()
-            return jsonify({'success': True, 'message': 'Server start initiated'})
+        @self.web_server.route('/api/console')
+        def api_console():
+            """Get recent console output"""
+            try:
+                # Get the last 100 console entries
+                recent_logs = self.console_history[-100:] if len(self.console_history) > 100 else self.console_history
+                return jsonify({'logs': recent_logs})
+            except Exception as e:
+                return jsonify({'error': f'Failed to get console logs: {str(e)}'})
         
-        @self.app.route('/api/stop', methods=['POST'])
-        def api_stop():
-            self.stop_server()
-            return jsonify({'success': True, 'message': 'Server stop initiated'})
+        @self.web_server.route('/api/files')
+        def api_files():
+            path = request.args.get('path', os.getcwd())
+            try:
+                files = self.get_file_list(path)
+                return jsonify({'files': files})
+            except Exception as e:
+                return jsonify({'error': str(e)})
         
-        @self.app.route('/api/restart', methods=['POST'])
-        def api_restart():
-            self.restart_server()
-            return jsonify({'success': True, 'message': 'Server restart initiated'})
-    
-    def setup_socketio_events(self):
-        """Setup SocketIO events for real-time updates"""
-        @self.socketio.on('connect')
-        def handle_connect():
-            print('Client connected to SocketIO')
-        
-        @self.socketio.on('disconnect')
-        def handle_disconnect():
-            print('Client disconnected from SocketIO')
-    
-    def render_web_interface(self):
-        """Render the web interface HTML"""
-        return '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Server Wrapper - Ubuntu ARM64</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Ubuntu', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #2c3e50, #34495e);
-            color: #ecf0f1;
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: rgba(52, 73, 94, 0.9);
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            background: linear-gradient(45deg, #3498db, #2ecc71);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .header .subtitle {
-            font-size: 1.1em;
-            color: #bdc3c7;
-            margin-bottom: 20px;
-        }
-        
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(44, 62, 80, 0.8);
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #e74c3c;
-            animation: pulse 2s infinite;
-        }
-        
-        .status-indicator.running {
-            background: #27ae60;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-        
-        .controls {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 30px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            min-width: 120px;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-        
-        .btn-start {
-            background: linear-gradient(45deg, #27ae60, #2ecc71);
-            color: white;
-        }
-        
-        .btn-stop {
-            background: linear-gradient(45deg, #e74c3c, #c0392b);
-            color: white;
-        }
-        
-        .btn-restart {
-            background: linear-gradient(45deg, #f39c12, #e67e22);
-            color: white;
-        }
-        
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .console-section {
-            margin-bottom: 30px;
-        }
-        
-        .section-title {
-            font-size: 1.5em;
-            margin-bottom: 15px;
-            color: #3498db;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 5px;
-        }
-        
-        .console {
-            background: #1a1a1a;
-            border: 2px solid #34495e;
-            border-radius: 8px;
-            padding: 15px;
-            height: 400px;
-            overflow-y: auto;
-            font-family: 'Ubuntu Mono', 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.4;
-            color: #00ff00;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        
-        .console::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        .console::-webkit-scrollbar-track {
-            background: #2c3e50;
-            border-radius: 4px;
-        }
-        
-        .console::-webkit-scrollbar-thumb {
-            background: #3498db;
-            border-radius: 4px;
-        }
-        
-        .command-input-section {
-            margin-top: 20px;
-        }
-        
-        .command-mode-buttons {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
-            justify-content: center;
-        }
-        
-        .mode-button {
-            padding: 8px 16px;
-            border: 2px solid #3498db;
-            background: transparent;
-            color: #3498db;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-        }
-        
-        .mode-button.active {
-            background: #3498db;
-            color: white;
-        }
-        
-        .mode-button:hover {
-            background: #3498db;
-            color: white;
-        }
-        
-        .command-input-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        
-        .command-input {
-            flex: 1;
-            padding: 12px 15px;
-            border: 2px solid #34495e;
-            border-radius: 8px;
-            background: #2c3e50;
-            color: #ecf0f1;
-            font-size: 16px;
-            font-family: 'Ubuntu Mono', monospace;
-        }
-        
-        .command-input:focus {
-            outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
-        }
-        
-        .send-btn {
-            padding: 12px 20px;
-            background: linear-gradient(45deg, #3498db, #2980b9);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        .send-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
-        }
-        
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            border-radius: 8px;
-            color: white;
-            font-weight: 600;
-            z-index: 1000;
-            transform: translateX(400px);
-            transition: transform 0.3s ease;
-        }
-        
-        .notification.show {
-            transform: translateX(0);
-        }
-        
-        .notification.success {
-            background: linear-gradient(45deg, #27ae60, #2ecc71);
-        }
-        
-        .notification.error {
-            background: linear-gradient(45deg, #e74c3c, #c0392b);
-        }
-        
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #34495e;
-            color: #7f8c8d;
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-            }
+        @self.web_server.route('/api/files/delete', methods=['POST'])
+        def api_files_delete():
+            data = request.get_json()
+            filename = data.get('filename')
+            path = data.get('path', os.getcwd())
             
-            .header h1 {
-                font-size: 2em;
-            }
+            if not filename:
+                return jsonify({'error': 'No filename provided'})
             
-            .status-bar {
-                flex-direction: column;
-                text-align: center;
-            }
-            
-            .controls {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .btn {
-                width: 100%;
-                max-width: 200px;
-            }
-            
-            .command-input-container {
-                flex-direction: column;
-            }
-            
-            .command-input {
-                width: 100%;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎮 Minecraft Server Wrapper</h1>
-            <div class="subtitle">Ubuntu ARM64 Edition - Optimized for Termux</div>
-        </div>
-        
-        <div class="status-bar">
-            <div class="status-item">
-                <div class="status-indicator" id="serverStatus"></div>
-                <span id="statusText">Stopped</span>
-            </div>
-            <div class="status-item">
-                <span>👥 Players: <span id="playerCount">0</span>/<span id="maxPlayers">20</span></span>
-            </div>
-            <div class="status-item">
-                <span>⏱️ Uptime: <span id="uptime">00:00:00</span></span>
-            </div>
-        </div>
-        
-        <div class="controls">
-            <button class="btn btn-start" id="startBtn" onclick="startServer()">▶️ Start</button>
-            <button class="btn btn-stop" id="stopBtn" onclick="stopServer()" disabled>⏹️ Stop</button>
-            <button class="btn btn-restart" id="restartBtn" onclick="restartServer()" disabled>🔄 Restart</button>
-        </div>
-        
-        <div class="console-section">
-            <h2 class="section-title">📋 Server Console</h2>
-            <div class="console" id="console"></div>
-            
-            <div class="command-input-section">
-                <div class="command-mode-buttons">
-                    <button class="mode-button active" id="cmdModeBtn" onclick="setCommandMode(true)">CMD</button>
-                    <button class="mode-button" id="chatModeBtn" onclick="setCommandMode(false)">Chat</button>
-                </div>
+            try:
+                file_path = os.path.join(path, filename)
+                file_path = os.path.normpath(file_path)
                 
-                <div class="command-input-container">
-                    <input type="text" class="command-input" id="commandInput" 
-                           placeholder="Enter server command..." 
-                           onkeypress="handleKeyPress(event)">
-                    <button class="send-btn" onclick="sendCommand()">Send</button>
-                </div>
-            </div>
-        </div>
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    return jsonify({'message': f'File {filename} deleted successfully'})
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                    return jsonify({'message': f'Directory {filename} deleted successfully'})
+                else:
+                    return jsonify({'error': 'File or directory not found'})
+            except Exception as e:
+                return jsonify({'error': f'Failed to delete: {str(e)}'})
         
-        <div class="footer">
-            <p>🚀 Powered by Flask & SocketIO | 🐧 Running on Ubuntu ARM64</p>
-        </div>
-    </div>
+        @self.web_server.route('/api/files/download/<path:filename>')
+        def api_files_download(filename):
+            try:
+                # Decode the path
+                file_path = os.path.normpath(filename)
+                
+                if os.path.isfile(file_path):
+                    return send_file(file_path, as_attachment=True)
+                else:
+                    return jsonify({'error': 'File not found'}), 404
+            except Exception as e:
+                return jsonify({'error': f'Failed to download file: {str(e)}'}), 500
     
-    <script>
-        let commandMode = true;
-        let lastConsoleLength = 0;
-        
-        function setCommandMode(isCommand) {
-            commandMode = isCommand;
-            const cmdBtn = document.getElementById('cmdModeBtn');
-            const chatBtn = document.getElementById('chatModeBtn');
-            const input = document.getElementById('commandInput');
+    def get_file_list(self, path=None):
+        """Get list of files and directories"""
+        try:
+            if not path:
+                path = os.getcwd()
             
-            if (isCommand) {
-                cmdBtn.classList.add('active');
-                chatBtn.classList.remove('active');
-                input.placeholder = 'Enter server command...';
-            } else {
-                cmdBtn.classList.remove('active');
-                chatBtn.classList.add('active');
-                input.placeholder = 'Enter chat message...';
-            }
-        }
-        
-        function startServer() {
-            fetch('/api/start', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showNotification('Server start initiated', 'success');
-                    } else {
-                        showNotification(data.message || 'Failed to start server', 'error');
-                    }
-                })
-                .catch(error => {
-                    showNotification('Error starting server', 'error');
-                });
-        }
-        
-        function stopServer() {
-            fetch('/api/stop', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showNotification('Server stop initiated', 'success');
-                    } else {
-                        showNotification(data.message || 'Failed to stop server', 'error');
-                    }
-                })
-                .catch(error => {
-                    showNotification('Error stopping server', 'error');
-                });
-        }
-        
-        function restartServer() {
-            fetch('/api/restart', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showNotification('Server restart initiated', 'success');
-                    } else {
-                        showNotification(data.message || 'Failed to restart server', 'error');
-                    }
-                })
-                .catch(error => {
-                    showNotification('Error restarting server', 'error');
-                });
-        }
-        
-        function sendCommand() {
-            const input = document.getElementById('commandInput');
-            const command = input.value.trim();
+            path = os.path.normpath(path)
             
-            if (!command) return;
+            if not os.path.exists(path):
+                raise Exception(f"Path does not exist: {path}")
             
-            // Prepare the final command based on mode
-            let finalCommand = command;
-            if (!commandMode) {
-                finalCommand = 'say ' + command;
-            }
+            if not os.path.isdir(path):
+                raise Exception(f"Path is not a directory: {path}")
             
-            fetch('/api/command', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ command: finalCommand })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    input.value = '';
-                } else {
-                    showNotification(data.message || 'Failed to send command', 'error');
-                }
-            })
-            .catch(error => {
-                showNotification('Error sending command', 'error');
-            });
-        }
-        
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendCommand();
-            }
-        }
-        
-        function updateStatus() {
-            fetch('/api/status')
-                .then(response => response.json())
-                .then(data => {
-                    const statusIndicator = document.getElementById('serverStatus');
-                    const statusText = document.getElementById('statusText');
-                    const playerCount = document.getElementById('playerCount');
-                    const maxPlayers = document.getElementById('maxPlayers');
-                    const uptime = document.getElementById('uptime');
-                    const startBtn = document.getElementById('startBtn');
-                    const stopBtn = document.getElementById('stopBtn');
-                    const restartBtn = document.getElementById('restartBtn');
-                    
-                    if (data.running) {
-                        statusIndicator.classList.add('running');
-                        statusText.textContent = 'Running';
-                        startBtn.disabled = true;
-                        stopBtn.disabled = false;
-                        restartBtn.disabled = false;
-                    } else {
-                        statusIndicator.classList.remove('running');
-                        statusText.textContent = 'Stopped';
-                        startBtn.disabled = false;
-                        stopBtn.disabled = true;
-                        restartBtn.disabled = true;
-                    }
-                    
-                    playerCount.textContent = data.players;
-                    maxPlayers.textContent = data.max_players;
-                    
-                    // Format uptime
-                    const hours = Math.floor(data.uptime / 3600);
-                    const minutes = Math.floor((data.uptime % 3600) / 60);
-                    const seconds = data.uptime % 60;
-                    uptime.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                })
-                .catch(error => {
-                    console.error('Error updating status:', error);
-                });
-        }
-        
-        function updateConsole() {
-            fetch('/api/console')
-                .then(response => response.json())
-                .then(data => {
-                    const console = document.getElementById('console');
-                    
-                    // Only update if there are new messages
-                    if (data.history.length > lastConsoleLength) {
-                        // Get new messages
-                        const newMessages = data.history.slice(lastConsoleLength);
+            files = []
+            try:
+                for item in os.listdir(path):
+                    item_path = os.path.join(path, item)
+                    try:
+                        stat = os.stat(item_path)
+                        is_dir = os.path.isdir(item_path)
                         
-                        // Add new messages to console
-                        newMessages.forEach(entry => {
-                            const line = `[${entry.timestamp}] ${entry.message}\n`;
-                            console.textContent += line;
-                        });
+                        file_info = {
+                            'name': item,
+                            'type': 'directory' if is_dir else 'file',
+                            'size': self.format_file_size(stat.st_size) if not is_dir else '',
+                            'modified': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(stat.st_mtime))
+                        }
+                        files.append(file_info)
+                    except (OSError, PermissionError):
+                        # Skip files we can't access
+                        continue
                         
-                        // Auto-scroll to bottom
-                        console.scrollTop = console.scrollHeight;
-                        
-                        // Update last length
-                        lastConsoleLength = data.history.length;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error updating console:', error);
-                });
-        }
-        
-        function showNotification(message, type) {
-            // Remove existing notifications
-            const existing = document.querySelector('.notification');
-            if (existing) {
-                existing.remove();
-            }
+            except PermissionError:
+                raise Exception(f"Permission denied accessing: {path}")
             
-            const notification = document.createElement('div');
-            notification.className = `notification ${type}`;
-            notification.textContent = message;
-            document.body.appendChild(notification);
+            # Sort directories first, then files
+            files.sort(key=lambda x: (x['type'] == 'file', x['name'].lower()))
+            return files
             
-            // Show notification
-            setTimeout(() => {
-                notification.classList.add('show');
-            }, 100);
-            
-            // Hide notification after 3 seconds
-            setTimeout(() => {
-                notification.classList.remove('show');
-                setTimeout(() => {
-                    notification.remove();
-                }, 300);
-            }, 3000);
-        }
-        
-        // Initialize
-        updateStatus();
-        updateConsole();
-        
-        // Update every 2 seconds
-        setInterval(updateStatus, 2000);
-        setInterval(updateConsole, 1000);
-    </script>
-</body>
-</html>
-        '''
+        except Exception as e:
+            raise Exception(f"Error listing files: {str(e)}")
     
-    # User management methods (simplified for headless operation)
+    def format_file_size(self, size_bytes):
+        """Format file size in human readable format"""
+        if size_bytes == 0:
+            return "0 B"
+        size_names = ["B", "KB", "MB", "GB", "TB"]
+        import math
+        i = int(math.floor(math.log(size_bytes, 1024)))
+        p = math.pow(1024, i)
+        s = round(size_bytes / p, 2)
+        return f"{s} {size_names[i]}"
+    
     def load_users(self):
         """Load users from file"""
         try:
@@ -1313,65 +895,569 @@ class MinecraftServerWrapper:
         """Load pending registrations"""
         return {}
     
+    def get_web_interface(self):
+        """Return the web interface HTML"""
+        return '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Server Wrapper - Ubuntu ARM64</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Ubuntu', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .card h2 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .status-item {
+            text-align: center;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 10px;
+            border-left: 4px solid #4299e1;
+        }
+        
+        .status-item .label {
+            font-size: 0.9em;
+            color: #718096;
+            margin-bottom: 5px;
+        }
+        
+        .status-item .value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .btn-start {
+            background: linear-gradient(45deg, #48bb78, #38a169);
+            color: white;
+        }
+        
+        .btn-stop {
+            background: linear-gradient(45deg, #f56565, #e53e3e);
+            color: white;
+        }
+        
+        .btn-restart {
+            background: linear-gradient(45deg, #ed8936, #dd6b20);
+            color: white;
+        }
+        
+        .btn-kill {
+            background: linear-gradient(45deg, #9f7aea, #805ad5);
+            color: white;
+        }
+        
+        .console-container {
+            grid-column: 1 / -1;
+        }
+        
+        .console {
+            background: #1a202c;
+            color: #00ff00;
+            font-family: 'Ubuntu Mono', 'Courier New', monospace;
+            font-size: 14px;
+            padding: 20px;
+            border-radius: 10px;
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 2px solid #2d3748;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .console::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .console::-webkit-scrollbar-track {
+            background: #2d3748;
+            border-radius: 4px;
+        }
+        
+        .console::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 4px;
+        }
+        
+        .console::-webkit-scrollbar-thumb:hover {
+            background: #718096;
+        }
+        
+        .command-section {
+            margin-top: 20px;
+        }
+        
+        .command-mode-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .mode-button {
+            padding: 8px 16px;
+            border: 2px solid #4299e1;
+            background: transparent;
+            color: #4299e1;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+        
+        .mode-button.active {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .mode-button:hover {
+            background: #4299e1;
+            color: white;
+        }
+        
+        .command-input-container {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .command-input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1em;
+            background: white;
+            transition: border-color 0.3s ease;
+        }
+        
+        .command-input:focus {
+            outline: none;
+            border-color: #4299e1;
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+        }
+        
+        .btn-send {
+            background: linear-gradient(45deg, #4299e1, #3182ce);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-send:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: white;
+            opacity: 0.8;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .status-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification.success {
+            background: linear-gradient(45deg, #48bb78, #38a169);
+        }
+        
+        .notification.error {
+            background: linear-gradient(45deg, #f56565, #e53e3e);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 Minecraft Server Wrapper</h1>
+            <p>🚀 Powered by Flask & SocketIO | 🐧 Running on Ubuntu ARM64</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="card">
+                <h2>📊 Server Status</h2>
+                <div class="status-grid">
+                    <div class="status-item">
+                        <div class="label">Status</div>
+                        <div class="value" id="server-status">Stopped</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="label">Players</div>
+                        <div class="value" id="player-count">0/20</div>
+                    </div>
+                    <div class="status-item">
+                        <div class="label">Uptime</div>
+                        <div class="value" id="uptime">00:00:00</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>🎛️ Server Controls</h2>
+                <div class="controls">
+                    <button class="btn btn-start" onclick="startServer()">▶ Start</button>
+                    <button class="btn btn-stop" onclick="stopServer()">⏹ Stop</button>
+                    <button class="btn btn-restart" onclick="restartServer()">🔄 Restart</button>
+                    <button class="btn btn-kill" onclick="killServer()">💀 Kill</button>
+                </div>
+            </div>
+            
+            <div class="card console-container">
+                <h2>💻 Server Console</h2>
+                <div id="console" class="console"></div>
+                
+                <div class="command-section">
+                    <div class="command-mode-buttons">
+                        <button class="mode-button active" onclick="setCommandMode(true)">CMD</button>
+                        <button class="mode-button" onclick="setCommandMode(false)">Chat</button>
+                    </div>
+                    <div class="command-input-container">
+                        <input type="text" id="command-input" class="command-input" 
+                               placeholder="Enter server command..." 
+                               onkeypress="handleKeyPress(event)">
+                        <button class="btn-send" onclick="sendCommand()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>🚀 Powered by Flask & SocketIO | 🐧 Running on Ubuntu ARM64</p>
+        </div>
+    </div>
+    
+    <script>
+        let commandMode = true;
+        let socket = io();
+        
+        // SocketIO event handlers
+        socket.on('connect', function() {
+            console.log('Connected to server via SocketIO');
+        });
+        
+        socket.on('console_update', function(data) {
+            addConsoleMessage(data.message, data.timestamp);
+        });
+        
+        socket.on('console_history', function(data) {
+            const console = document.getElementById('console');
+            console.innerHTML = '';
+            data.forEach(entry => {
+                addConsoleMessage(entry.message, entry.timestamp);
+            });
+        });
+        
+        function setCommandMode(isCommand) {
+            commandMode = isCommand;
+            const buttons = document.querySelectorAll('.mode-button');
+            const input = document.getElementById('command-input');
+            
+            buttons.forEach(btn => btn.classList.remove('active'));
+            
+            if (isCommand) {
+                buttons[0].classList.add('active');
+                input.placeholder = 'Enter server command...';
+            } else {
+                buttons[1].classList.add('active');
+                input.placeholder = 'Enter chat message...';
+            }
+        }
+        
+        function addConsoleMessage(message, timestamp) {
+            const console = document.getElementById('console');
+            const line = document.createElement('div');
+            line.textContent = `[${timestamp}] ${message}`;
+            console.appendChild(line);
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => notification.classList.add('show'), 100);
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => document.body.removeChild(notification), 300);
+            }, 3000);
+        }
+        
+        function updateStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('server-status').textContent = data.running ? 'Running' : 'Stopped';
+                    document.getElementById('player-count').textContent = `${data.players}/${data.max_players}`;
+                    
+                    const hours = Math.floor(data.uptime / 3600);
+                    const minutes = Math.floor((data.uptime % 3600) / 60);
+                    const seconds = data.uptime % 60;
+                    const uptime = document.getElementById('uptime');
+                    uptime.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                })
+                .catch(error => {
+                    console.error('Error updating status:', error);
+                });
+        }
+        
+        function startServer() {
+            fetch('/api/start', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    showNotification(data.message || data.error, data.error ? 'error' : 'success');
+                })
+                .catch(error => {
+                    showNotification('Failed to start server', 'error');
+                });
+        }
+        
+        function stopServer() {
+            fetch('/api/stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    showNotification(data.message || data.error, data.error ? 'error' : 'success');
+                })
+                .catch(error => {
+                    showNotification('Failed to stop server', 'error');
+                });
+        }
+        
+        function restartServer() {
+            fetch('/api/restart', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    showNotification(data.message || data.error, data.error ? 'error' : 'success');
+                })
+                .catch(error => {
+                    showNotification('Failed to restart server', 'error');
+                });
+        }
+        
+        function killServer() {
+            if (confirm('Are you sure you want to force kill the server? This may cause data loss.')) {
+                fetch('/api/kill', { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        showNotification(data.message || data.error, data.error ? 'error' : 'success');
+                    })
+                    .catch(error => {
+                        showNotification('Failed to kill server', 'error');
+                    });
+            }
+        }
+        
+        function sendCommand() {
+            const input = document.getElementById('command-input');
+            let command = input.value.trim();
+            
+            if (!command) return;
+            
+            // Add "say" prefix for chat mode
+            if (!commandMode) {
+                command = `say ${command}`;
+            }
+            
+            fetch('/api/command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ command: command })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showNotification(data.error, 'error');
+                }
+                input.value = '';
+            })
+            .catch(error => {
+                showNotification('Failed to send command', 'error');
+            });
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendCommand();
+            }
+        }
+        
+        // Update status every 2 seconds
+        setInterval(updateStatus, 2000);
+        
+        // Initial status update
+        updateStatus();
+    </script>
+</body>
+</html>
+        '''
+    
     def on_closing(self):
         """Handle application closing"""
-        print("Shutting down...")
-        
-        # Stop server if running
-        if self.server_running:
-            self.stop_server()
-        
-        # Save configuration and console history
         self.save_config()
         self.save_console_history()
         
-        # Stop web server
-        if self.web_server_running:
-            print("Stopping web server...")
+        if self.server_running:
+            print("Stopping server before exit...")
+            self.stop_server()
         
-        if not self.headless and self.root:
+        if not self.headless and GUI_AVAILABLE and self.root:
             self.root.destroy()
-        
-        print("Shutdown complete")
-        sys.exit(0)
-    
-    def run(self):
-        """Run the application"""
-        if self.headless:
-            print(f"Minecraft Server Wrapper running in headless mode")
-            print(f"Web interface available at: http://localhost:{self.web_port}")
-            print("Press Ctrl+C to stop")
-            
-            try:
-                # Keep the main thread alive
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                self.on_closing()
         else:
-            # Run GUI
-            self.root.mainloop()
+            sys.exit(0)
 
 def main():
-    """Main function with command line argument support"""
     parser = argparse.ArgumentParser(description='Minecraft Server Wrapper for Ubuntu ARM64')
-    parser.add_argument('--headless', action='store_true', 
-                       help='Run in headless mode (web interface only)')
-    parser.add_argument('--port', type=int, default=5000,
-                       help='Web interface port (default: 5000)')
+    parser.add_argument('--headless', action='store_true', help='Run in headless mode (no GUI)')
+    parser.add_argument('--port', type=int, default=5000, help='Web interface port (default: 5000)')
     
     args = parser.parse_args()
     
-    # Create and run the wrapper
-    wrapper = MinecraftServerWrapper(headless=args.headless)
-    
-    # Set custom port if specified
-    if args.port != 5000:
-        wrapper.web_port = args.port
-        wrapper.config["web_port"] = args.port
-        wrapper.save_config()
-    
-    wrapper.run()
+    if args.headless or not GUI_AVAILABLE:
+        print("Starting in headless mode...")
+        app = MinecraftServerWrapper(headless=True, port=args.port)
+        
+        try:
+            print(f"Server running. Access web interface at http://localhost:{args.port}")
+            print("Press Ctrl+C to stop")
+            
+            # Keep the main thread alive
+            while True:
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            print("\nShutting down...")
+            app.on_closing()
+    else:
+        print("Starting with GUI...")
+        root = tk.Tk()
+        app = MinecraftServerWrapper(root, headless=False, port=args.port)
+        root.mainloop()
 
 if __name__ == "__main__":
     main()
