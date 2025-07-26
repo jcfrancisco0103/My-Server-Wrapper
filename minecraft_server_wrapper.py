@@ -388,14 +388,22 @@ class MinecraftServerWrapper:
                 # Send stop command
                 self.server_process.stdin.write("stop\\n")
                 self.server_process.stdin.flush()
+                self.log_message("Stop command sent to server")
                 
-                # Wait for graceful shutdown
+                # Wait for graceful shutdown with shorter timeout
                 try:
-                    self.server_process.wait(timeout=30)
+                    self.server_process.wait(timeout=15)
+                    self.log_message("Server stopped gracefully")
                 except subprocess.TimeoutExpired:
-                    # Force kill if not stopped gracefully
-                    self.server_process.kill()
-                    self.log_message("Server force killed after timeout")
+                    # Force terminate if not stopped gracefully
+                    self.log_message("Server taking too long to stop, force terminating...")
+                    self.server_process.terminate()
+                    try:
+                        self.server_process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.log_message("Force killing server process...")
+                        self.server_process.kill()
+                        self.server_process.wait()
                 
                 self.server_process = None
             
@@ -403,8 +411,22 @@ class MinecraftServerWrapper:
             self.update_button_states()
             self.log_message("Server stopped")
             
+            # Save console history and config immediately after stopping
+            self.save_console_history()
+            self.save_config()
+            
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to stop server: {str(e)}")
+            self.log_message(f"Error stopping server: {str(e)}")
+            # Force cleanup if there's an error
+            if self.server_process:
+                try:
+                    self.server_process.kill()
+                    self.server_process.wait()
+                except:
+                    pass
+                self.server_process = None
+            self.server_running = False
+            self.update_button_states()
     
     def restart_server(self):
         """Restart the Minecraft server"""
@@ -559,7 +581,7 @@ class MinecraftServerWrapper:
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Minecraft Server Wrapper</title>
+                <title>Cacasians Minecraft Server</title>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
@@ -819,6 +841,7 @@ class MinecraftServerWrapper:
                         display: flex;
                         gap: 10px;
                         margin-top: 15px;
+                        align-items: center;
                     }
                     
                     .command-input input {
@@ -844,6 +867,35 @@ class MinecraftServerWrapper:
                         cursor: pointer;
                         font-weight: 600;
                         transition: all 0.3s ease;
+                    }
+                    
+                    .command-mode-buttons {
+                        display: flex;
+                        gap: 5px;
+                    }
+                    
+                    .mode-button {
+                        padding: 8px 12px;
+                        border: none;
+                        border-radius: 6px;
+                        background: rgba(255, 255, 255, 0.2);
+                        color: white;
+                        cursor: pointer;
+                        font-size: 12px;
+                        font-weight: bold;
+                        transition: all 0.3s ease;
+                    }
+                    
+                    .mode-button.active {
+                        background: linear-gradient(45deg, #e74c3c, #c0392b);
+                    }
+                    
+                    .mode-button:hover {
+                        background: rgba(255, 255, 255, 0.3);
+                    }
+                    
+                    .mode-button.active:hover {
+                        background: linear-gradient(45deg, #c0392b, #a93226);
                     }
                     
                     .file-manager {
@@ -1056,6 +1108,10 @@ class MinecraftServerWrapper:
                                 <h3>📟 Console Output</h3>
                                 <div id="console" class="console"></div>
                                 <div class="command-input">
+                                    <div class="command-mode-buttons">
+                                        <button class="mode-button active" id="cmd-mode" onclick="setCommandMode('cmd')">CMD</button>
+                                        <button class="mode-button" id="chat-mode" onclick="setCommandMode('chat')">Chat</button>
+                                    </div>
                                     <input type="text" id="command" placeholder="Enter server command..." onkeypress="if(event.key==='Enter') sendCommand()">
                                     <button onclick="sendCommand()">Send</button>
                                 </div>
@@ -1080,6 +1136,24 @@ class MinecraftServerWrapper:
                 
                 <script>
                     let currentPath = 'C:\\\\Users\\\\MersYeon\\\\Desktop\\\\Cacasians';
+                    let commandMode = 'cmd'; // 'cmd' or 'chat'
+                    
+                    function setCommandMode(mode) {
+                        commandMode = mode;
+                        const cmdButton = document.getElementById('cmd-mode');
+                        const chatButton = document.getElementById('chat-mode');
+                        const commandInput = document.getElementById('command');
+                        
+                        if (mode === 'cmd') {
+                            cmdButton.classList.add('active');
+                            chatButton.classList.remove('active');
+                            commandInput.placeholder = 'Enter server command...';
+                        } else {
+                            chatButton.classList.add('active');
+                            cmdButton.classList.remove('active');
+                            commandInput.placeholder = 'Enter chat message...';
+                        }
+                    }
                     
                     function switchTab(tabName) {
                         // Hide all tab contents
@@ -1148,19 +1222,25 @@ class MinecraftServerWrapper:
                         const command = document.getElementById('command').value;
                         if (!command) return;
                         
+                        let finalCommand = command;
+                        
+                        // If in chat mode, prepend with 'say' command
+                        if (commandMode === 'chat') {
+                            finalCommand = `say ${command}`;
+                        }
+                        
                         fetch('/api/command', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({command: command})
+                            body: JSON.stringify({command: finalCommand})
                         })
                         .then(response => response.json())
                         .then(data => {
                             document.getElementById('command').value = '';
                             if (data.error) {
                                 showNotification(data.error, 'error');
-                            } else {
-                                showNotification('Command sent successfully');
                             }
+                            // Removed the annoying "Command sent successfully" notification
                         })
                         .catch(error => showNotification('Error sending command', 'error'));
                     }
@@ -1503,10 +1583,18 @@ class MinecraftServerWrapper:
                 return jsonify({'error': 'Server is not running'})
             
             try:
+                # Ensure the server process is still alive
+                if not self.server_process or self.server_process.poll() is not None:
+                    return jsonify({'error': 'Server process is not available'})
+                
+                # Send command to server
                 self.server_process.stdin.write(command + "\\n")
                 self.server_process.stdin.flush()
+                
+                # Log the command
                 self.root.after(0, lambda: self.log_message(f"[WEB] {command}"))
-                return jsonify({'message': 'Command sent'})
+                
+                return jsonify({'message': 'Command executed'})
             except Exception as e:
                 return jsonify({'error': f'Failed to send command: {str(e)}'})
         
