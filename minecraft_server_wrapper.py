@@ -32,7 +32,7 @@ from functools import wraps
 class MinecraftServerWrapper:
     def __init__(self):
         # Application version and update settings
-        self.current_version = "1.0.2"  # Current app version - Added Authentication System
+        self.current_version = "1.0.3"  # Current app version - Added Authentication System
         self.github_repo = "jcfrancisco0103/My-Server-Wrapper"  # Your GitHub repo
         self.github_api_url = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
         self.update_check_interval = 3600  # Check for updates every hour (in seconds)
