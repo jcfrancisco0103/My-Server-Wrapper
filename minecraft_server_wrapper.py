@@ -1497,6 +1497,98 @@ class MinecraftServerWrapper:
             max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .sidebar {
+            width: 280px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .main-content {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .sidebar-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar-card:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .sidebar-card h3 {
+            margin: 0 0 20px 0;
+            font-size: 1.3em;
+            font-weight: 600;
+            color: white;
+            text-align: center;
+        }
+        
+        .sidebar-btn {
+            width: 100%;
+            padding: 15px 20px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 15px;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            color: white;
+        }
+        
+        .sidebar-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .sidebar-btn:last-child {
+            margin-bottom: 0;
+        }
+        
+        .btn-files {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+        }
+        
+        .btn-updates {
+            background: linear-gradient(45deg, #9b59b6, #8e44ad);
+        }
+        
+        .btn-admin-sidebar {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+        
+        .sidebar-info {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .sidebar-info p {
+            margin: 0;
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.4;
         }
         
         .header {
@@ -1522,23 +1614,68 @@ class MinecraftServerWrapper:
             margin-bottom: 30px;
         }
         
+        .monitor-section {
+            margin-bottom: 40px;
+        }
+        
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .management-section {
+            margin-bottom: 30px;
+        }
+        
         .card {
             background: rgba(255, 255, 255, 0.15);
             border-radius: 15px;
             padding: 25px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
         
         .card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
         
         .card h3 {
             margin-bottom: 20px;
             font-size: 1.3em;
             font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-details {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .status-label {
+            font-weight: 500;
+            opacity: 0.9;
+        }
+        
+        .status-value {
+            font-weight: 600;
+            color: #fff;
         }
         
         .status-indicator {
@@ -1547,22 +1684,104 @@ class MinecraftServerWrapper:
             height: 12px;
             border-radius: 50%;
             margin-right: 10px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
         
         .status-running {
             background: #27ae60;
-            box-shadow: 0 0 10px #27ae60;
+            box-shadow: 0 0 15px #27ae60;
         }
         
         .status-stopped {
             background: #e74c3c;
-            box-shadow: 0 0 10px #e74c3c;
+            box-shadow: 0 0 15px #e74c3c;
         }
         
-        .control-buttons {
+        .control-buttons, .tool-buttons {
             display: flex;
-            gap: 10px;
+            gap: 12px;
             flex-wrap: wrap;
+        }
+        
+        .performance-card {
+            grid-column: span 2;
+        }
+        
+        .performance-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .metric-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .metric-item:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .metric-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        
+        .metric-icon {
+            font-size: 1.5em;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        
+        .metric-info {
+            flex: 1;
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 5px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metric-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: white;
+            line-height: 1;
+        }
+        
+        .metric-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .metric-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
         }
         
         .btn {
@@ -1643,48 +1862,6 @@ class MinecraftServerWrapper:
             margin-right: 8px;
         }
         
-        .performance-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-        
-        .metric-item {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 15px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .metric-label {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.8);
-            margin-bottom: 8px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .metric-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: white;
-            margin-bottom: 10px;
-        }
-        
-        .metric-bar {
-            height: 8px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        
-        .metric-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.5s ease;
-        }
-        
         .command-input {
             display: flex;
             gap: 15px;
@@ -1750,11 +1927,42 @@ class MinecraftServerWrapper:
         }
         
         @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .sidebar {
+                width: 100%;
+                order: -1;
+            }
+            
+            .sidebar-card {
+                padding: 20px;
+            }
+            
+            .sidebar-btn {
+                padding: 12px 16px;
+                font-size: 13px;
+            }
+            
             .dashboard-grid {
                 grid-template-columns: 1fr;
             }
             
-            .control-buttons {
+            .monitor-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .performance-card {
+                grid-column: span 1;
+            }
+            
+            .performance-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .control-buttons, .tool-buttons {
                 flex-direction: column;
             }
             
@@ -1774,114 +1982,183 @@ class MinecraftServerWrapper:
                 flex-direction: column;
             }
             
-            .performance-grid {
-                grid-template-columns: 1fr;
+            .metric-header {
+                flex-direction: column;
+                text-align: center;
+                gap: 8px;
             }
             
-
+            .metric-icon {
+                margin: 0 auto;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h1>🎮 Minecraft Server Wrapper</h1>
-                    <p>Advanced Server Management Dashboard</p>
+        <!-- Left Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-card">
+                <h3>📂 File Management</h3>
+                <a href="/files" class="sidebar-btn btn-files">
+                    📁 Open File Manager
+                </a>
+                <div class="sidebar-info">
+                    <p>Manage your Minecraft server files with drag-and-drop functionality. Upload, download, rename, and delete files easily.</p>
                 </div>
-                <div style="text-align: right;">
-                    <p style="margin: 0; font-size: 1.1em; font-weight: 500;">Welcome, {{ username }}!</p>
-                    <div style="margin-top: 10px;">
-                        {% if is_admin %}
-                        <a href="/admin" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 5px; margin-right: 10px; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">👑 Admin Panel</a>
-                        {% endif %}
-                        <a href="/logout" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 5px; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">🚪 Logout</a>
+            </div>
+            
+            <div class="sidebar-card">
+                <h3>🔄 System Updates</h3>
+                <button class="sidebar-btn btn-updates" onclick="checkForUpdates()">
+                    🔍 Check for Updates
+                </button>
+                <div class="sidebar-info">
+                    <p>Keep your server wrapper up-to-date with the latest features and security improvements.</p>
+                </div>
+            </div>
+            
+            {% if is_admin %}
+            <div class="sidebar-card">
+                <h3>👑 Administration</h3>
+                <a href="/admin" class="sidebar-btn btn-admin-sidebar">
+                    ⚙️ Admin Panel
+                </a>
+                <div class="sidebar-info">
+                    <p>Manage users, configure settings, and access advanced administrative features.</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="header">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h1>🎮 Minecraft Server Wrapper</h1>
+                        <p>Advanced Server Management Dashboard</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="margin: 0; font-size: 1.1em; font-weight: 500;">Welcome, {{ username }}!</p>
+                        <div style="margin-top: 10px;">
+                            <a href="/logout" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 5px; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">🚪 Logout</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        
+        <!-- Server Monitor Section -->
+        <div class="monitor-section">
+            
+            <div class="monitor-grid">
+                <div class="card status-card">
+                    <h3>🔧 Server Status</h3>
+                    <div id="status" style="display: flex; align-items: center; margin-bottom: 20px;">
+                        <span class="status-indicator status-stopped"></span>
+                        <span id="status-text" style="font-size: 1.2em; font-weight: 600;">Server Stopped</span>
+                    </div>
+                    <div class="status-details">
+                        <div class="status-item">
+                            <span class="status-label">👥 Players:</span>
+                            <span class="status-value"><span id="player-count">0</span>/<span id="max-players">20</span></span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">⏱️ Uptime:</span>
+                            <span class="status-value" id="uptime">0 minutes</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">🌐 Server IP:</span>
+                            <span class="status-value">localhost:25565</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h3>⚡ Server Controls</h3>
+                    <div class="control-buttons">
+                        <button class="btn btn-start" onclick="startServer()">▶ Start Server</button>
+                        <button class="btn btn-stop" onclick="stopServer()">⏹ Stop Server</button>
+                        <button class="btn btn-restart" onclick="restartServer()">🔄 Restart</button>
+                        <button class="btn btn-optimize" onclick="optimizeRAM()">🧹 Clean RAM</button>
+                    </div>
+                </div>
+                
+                <div class="card performance-card">
+                    <h3>📊 Performance Metrics</h3>
+                    <div class="performance-grid">
+                        <div class="metric-item">
+                            <div class="metric-header">
+                                <span class="metric-icon">🖥️</span>
+                                <div class="metric-info">
+                                    <div class="metric-label">CPU Usage</div>
+                                    <div class="metric-value" id="cpu-usage">0%</div>
+                                </div>
+                            </div>
+                            <div class="metric-bar">
+                                <div class="metric-fill" id="cpu-bar" style="width: 0%; background: linear-gradient(90deg, #27ae60, #f39c12, #e74c3c);"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="metric-item">
+                            <div class="metric-header">
+                                <span class="metric-icon">💾</span>
+                                <div class="metric-info">
+                                    <div class="metric-label">System RAM</div>
+                                    <div class="metric-value" id="ram-usage">0%</div>
+                                </div>
+                            </div>
+                            <div class="metric-bar">
+                                <div class="metric-fill" id="ram-bar" style="width: 0%; background: linear-gradient(90deg, #3498db, #9b59b6);"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="metric-item">
+                            <div class="metric-header">
+                                <span class="metric-icon">🎮</span>
+                                <div class="metric-info">
+                                    <div class="metric-label">Server RAM</div>
+                                    <div class="metric-value" id="server-ram">0 MB</div>
+                                </div>
+                            </div>
+                            <div class="metric-bar">
+                                <div class="metric-fill" id="server-ram-bar" style="width: 0%; background: linear-gradient(90deg, #e67e22, #d35400);"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="metric-item">
+                            <div class="metric-header">
+                                <span class="metric-icon">⚡</span>
+                                <div class="metric-info">
+                                    <div class="metric-label">Server TPS</div>
+                                    <div class="metric-value" id="server-tps">20.0</div>
+                                </div>
+                            </div>
+                            <div class="metric-bar">
+                                <div class="metric-fill" id="tps-bar" style="width: 100%; background: linear-gradient(90deg, #e74c3c, #f39c12, #27ae60);"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
         
-        <div class="dashboard-grid">
-            <div class="card status-card">
-                <h3>🔧 Server Status</h3>
-                <div id="status">
-                    <span class="status-indicator status-stopped"></span>
-                    <span id="status-text">Server Stopped</span>
-                </div>
-                <div id="player-info" style="margin-top: 15px; font-size: 16px; font-weight: 500;">
-                    Players: <span id="player-count">0</span>/<span id="max-players">20</span>
-                </div>
-                <div id="uptime-info" style="margin-top: 10px; font-size: 14px; opacity: 0.8;">
-                    Uptime: <span id="uptime">0 minutes</span>
-                </div>
-            </div>
+        <!-- Management Section -->
+        <div class="management-section">
             
-            <div class="card">
-                <h3>⚡ Server Controls</h3>
-                <div class="control-buttons">
-                    <button class="btn btn-start" onclick="startServer()">▶ Start</button>
-                    <button class="btn btn-stop" onclick="stopServer()">⏹ Stop</button>
-                    <button class="btn btn-restart" onclick="restartServer()">🔄 Restart</button>
-                    <button class="btn btn-optimize" onclick="optimizeRAM()">🧹 Clean RAM</button>
-                    <button class="btn btn-update" onclick="checkForUpdates()" style="background: linear-gradient(45deg, #9b59b6, #8e44ad);">🔄 Check Updates</button>
-                </div>
-            </div>
-            
-            <div class="card">
-                <h3>📊 Performance Monitor</h3>
-                <div class="performance-grid">
-                    <div class="metric-item">
-                        <div class="metric-label">CPU Usage</div>
-                        <div class="metric-value" id="cpu-usage">0%</div>
-                        <div class="metric-bar">
-                            <div class="metric-fill" id="cpu-bar" style="width: 0%; background: linear-gradient(90deg, #27ae60, #f39c12, #e74c3c);"></div>
-                        </div>
+            <div class="dashboard-grid">
+                <div class="card console-section">
+                    <h3>📟 Real-time Console</h3>
+                    <div id="console" class="console"></div>
+                    <div class="command-input">
+                        <input type="text" id="command" placeholder="Enter server command..." onkeypress="if(event.key==='Enter') sendCommand()">
+                        <button onclick="sendCommand()">Send</button>
                     </div>
-                    <div class="metric-item">
-                        <div class="metric-label">System RAM</div>
-                        <div class="metric-value" id="ram-usage">0%</div>
-                        <div class="metric-bar">
-                            <div class="metric-fill" id="ram-bar" style="width: 0%; background: linear-gradient(90deg, #3498db, #9b59b6);"></div>
-                        </div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-label">Server RAM</div>
-                        <div class="metric-value" id="server-ram">0 MB</div>
-                        <div class="metric-bar">
-                            <div class="metric-fill" id="server-ram-bar" style="width: 0%; background: linear-gradient(90deg, #e67e22, #d35400);"></div>
-                        </div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-label">Server TPS</div>
-                        <div class="metric-value" id="server-tps">20.0</div>
-                        <div class="metric-bar">
-                            <div class="metric-fill" id="tps-bar" style="width: 100%; background: linear-gradient(90deg, #e74c3c, #f39c12, #27ae60);"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card console-section">
-                <h3>📟 Real-time Console</h3>
-                <div id="console" class="console"></div>
-                <div class="command-input">
-                    <input type="text" id="command" placeholder="Enter server command..." onkeypress="if(event.key==='Enter') sendCommand()">
-                    <button onclick="sendCommand()">Send</button>
-                </div>
-            </div>
-            
-            <div class="card">
-                <h3>📁 File Manager</h3>
-                <p style="margin-bottom: 20px; opacity: 0.8;">Manage your server files with drag-and-drop functionality</p>
-                <div class="control-buttons">
-                    <a href="/files" class="btn" style="background: linear-gradient(45deg, #27ae60, #2ecc71); color: white; text-decoration: none; display: inline-block; text-align: center;">
-                        📂 Open File Manager
-                    </a>
                 </div>
             </div>
         </div>
-    </div>
+        </div> <!-- End main-content -->
+    </div> <!-- End container -->
     
     <div id="notification" class="notification"></div>
     
@@ -2160,7 +2437,6 @@ class MinecraftServerWrapper:
         }
         
         .header {
-            text-align: center;
             margin-bottom: 30px;
             padding: 20px;
             background: rgba(255, 255, 255, 0.1);
@@ -2168,18 +2444,31 @@ class MinecraftServerWrapper:
             backdrop-filter: blur(10px);
         }
         
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
         .header h1 {
             font-size: 2.5em;
             font-weight: 700;
-            margin-bottom: 10px;
+            margin: 0;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
         }
         
         .nav-buttons {
             display: flex;
             gap: 15px;
             justify-content: center;
-            margin-bottom: 20px;
+            flex-wrap: wrap;
         }
         
         .nav-btn {
@@ -2422,15 +2711,73 @@ class MinecraftServerWrapper:
         .file-list::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.5);
         }
+        
+        /* Responsive Design for File Manager */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            
+            .nav-buttons {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .nav-btn {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+            
+            .file-controls {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .file-item {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+            
+            .file-actions {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .action-btn {
+                padding: 6px 10px;
+                font-size: 0.8rem;
+            }
+            
+            .drop-zone {
+                padding: 30px 15px;
+            }
+            
+            .drop-zone-text {
+                font-size: 1.1rem;
+            }
+            
+            .drop-zone-subtext {
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📁 File Manager</h1>
-            <div class="nav-buttons">
-                <a href="/" class="nav-btn">🏠 Dashboard</a>
-                <button class="nav-btn" onclick="refreshFileList()">🔄 Refresh</button>
+            <div class="header-content">
+                <div>
+                    <h1>📁 File Manager</h1>
+                    <p>Manage your Minecraft server files with drag-and-drop functionality</p>
+                </div>
+                <div class="nav-buttons">
+                    <a href="/" class="nav-btn">🏠 Dashboard</a>
+                    <a href="/admin" class="nav-btn">👑 Admin Panel</a>
+                    <button class="nav-btn" onclick="refreshFileList()">🔄 Refresh</button>
+                </div>
             </div>
         </div>
         
