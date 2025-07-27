@@ -30,5 +30,29 @@
   {
     "timestamp": "07:32:49",
     "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "08:03:45",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "08:04:01",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "08:04:01",
+    "message": "❌ Failed to check for updates: 404 Client Error: Not Found for url: https://api.github.com/repos/MersYeon/minecraft-server-wrapper/releases/latest"
+  },
+  {
+    "timestamp": "08:04:23",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "08:04:24",
+    "message": "❌ Failed to check for updates: 404 Client Error: Not Found for url: https://api.github.com/repos/MersYeon/minecraft-server-wrapper/releases/latest"
+  },
+  {
+    "timestamp": "08:05:21",
+    "message": "RAM optimization completed. Freed approximately 10.0 MB"
   }
 ]

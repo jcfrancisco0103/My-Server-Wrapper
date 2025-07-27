@@ -17,6 +17,10 @@ import webbrowser
 import gc
 import ctypes
 import psutil
+import requests
+import zipfile
+import shutil
+from packaging import version
 
 # Flask and SocketIO imports
 from flask import Flask, render_template_string, request, jsonify, send_file
@@ -25,6 +29,16 @@ from werkzeug.serving import make_server
 
 class MinecraftServerWrapper:
     def __init__(self):
+        # Application version and update settings
+        self.current_version = "2.1.0"  # Current app version
+        self.github_repo = "MersYeon/minecraft-server-wrapper"  # Your GitHub repo
+        self.github_api_url = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
+        self.update_check_interval = 3600  # Check for updates every hour (in seconds)
+        self.last_update_check = 0
+        self.update_available = False
+        self.latest_version = None
+        self.update_download_url = None
+        
         # Configuration
         self.config_file = "server_config.json"
         self.console_history_file = "console_history.json"
@@ -119,6 +133,207 @@ class MinecraftServerWrapper:
         except Exception as e:
             self.add_console_message(f"RAM optimization error: {e}")
             return 0
+
+    def check_for_updates(self, manual=False):
+        """Check for application updates from GitHub"""
+        try:
+            if manual:
+                self.add_console_message("🔍 Checking for updates...")
+            
+            # Make request to GitHub API
+            response = requests.get(self.github_api_url, timeout=10)
+            response.raise_for_status()
+            
+            release_data = response.json()
+            latest_version = release_data['tag_name'].lstrip('v')
+            
+            # Compare versions using packaging.version
+            if version.parse(latest_version) > version.parse(self.current_version):
+                self.update_available = True
+                self.latest_version = latest_version
+                
+                # Find the download URL for the main file
+                for asset in release_data.get('assets', []):
+                    if asset['name'].endswith('.py') or asset['name'].endswith('.zip'):
+                        self.update_download_url = asset['browser_download_url']
+                        break
+                else:
+                    # Fallback to zipball if no specific asset found
+                    self.update_download_url = release_data['zipball_url']
+                
+                message = f"🎉 Update available! Current: v{self.current_version} → Latest: v{latest_version}"
+                self.add_console_message(message)
+                
+                if manual:
+                    # Show update dialog
+                    self.show_update_dialog(latest_version, release_data.get('body', ''))
+                
+                # Emit to web clients
+                self.emit_update_notification('update_available', {
+                    'current_version': self.current_version,
+                    'latest_version': latest_version,
+                    'download_url': self.update_download_url,
+                    'release_notes': release_data.get('body', '')
+                })
+                
+                return True
+            else:
+                self.update_available = False
+                if manual:
+                    self.add_console_message(f"✅ You're running the latest version (v{self.current_version})")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            error_msg = f"❌ Failed to check for updates: {e}"
+            if manual:
+                self.add_console_message(error_msg)
+            print(error_msg)
+            return False
+        except Exception as e:
+            error_msg = f"❌ Update check error: {e}"
+            if manual:
+                self.add_console_message(error_msg)
+            print(error_msg)
+            return False
+
+    def show_update_dialog(self, latest_version, release_notes):
+        """Show update dialog to user"""
+        try:
+            from tkinter import messagebox
+            
+            message = f"A new version is available!\n\n"
+            message += f"Current Version: v{self.current_version}\n"
+            message += f"Latest Version: v{latest_version}\n\n"
+            
+            if release_notes:
+                # Truncate release notes if too long
+                notes = release_notes[:300] + "..." if len(release_notes) > 300 else release_notes
+                message += f"Release Notes:\n{notes}\n\n"
+            
+            message += "Would you like to download and install the update?"
+            
+            result = messagebox.askyesno("Update Available", message)
+            if result:
+                self.download_and_apply_update()
+                
+        except Exception as e:
+            print(f"Error showing update dialog: {e}")
+
+    def download_and_apply_update(self):
+        """Download and apply the update"""
+        try:
+            self.add_console_message("📥 Downloading update...")
+            
+            # Create backup directory
+            backup_dir = "backup"
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # Backup current file
+            current_file = os.path.abspath(__file__)
+            backup_file = os.path.join(backup_dir, f"minecraft_server_wrapper_v{self.current_version}_backup.py")
+            shutil.copy2(current_file, backup_file)
+            self.add_console_message(f"📋 Backup created: {backup_file}")
+            
+            # Download the update
+            response = requests.get(self.update_download_url, timeout=30)
+            response.raise_for_status()
+            
+            if self.update_download_url.endswith('.zip'):
+                # Handle ZIP file
+                zip_path = "update.zip"
+                with open(zip_path, 'wb') as f:
+                    f.write(response.content)
+                
+                # Extract ZIP
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall("update_temp")
+                
+                # Find the main Python file in extracted content
+                for root, dirs, files in os.walk("update_temp"):
+                    for file in files:
+                        if file.endswith('.py') and 'minecraft_server_wrapper' in file:
+                            new_file_path = os.path.join(root, file)
+                            break
+                    else:
+                        continue
+                    break
+                else:
+                    raise Exception("Could not find main Python file in update")
+                
+                # Copy new file
+                shutil.copy2(new_file_path, current_file)
+                
+                # Cleanup
+                os.remove(zip_path)
+                shutil.rmtree("update_temp")
+                
+            else:
+                # Handle direct Python file
+                with open(current_file, 'wb') as f:
+                    f.write(response.content)
+            
+            self.add_console_message(f"✅ Update downloaded and applied successfully!")
+            self.add_console_message(f"🔄 Please restart the application to use v{self.latest_version}")
+            
+            # Emit to web clients
+            self.emit_update_notification('update_applied', {
+                'success': True,
+                'message': f'Update to v{self.latest_version} applied successfully! Please restart the application.',
+                'new_version': self.latest_version
+            })
+            
+            # Show restart dialog
+            from tkinter import messagebox
+            result = messagebox.askyesno(
+                "Update Complete", 
+                f"Update to v{self.latest_version} has been applied successfully!\n\n"
+                "The application needs to be restarted to use the new version.\n\n"
+                "Would you like to restart now?"
+            )
+            
+            if result:
+                self.restart_application()
+            
+        except Exception as e:
+            error_msg = f"❌ Failed to apply update: {e}"
+            self.add_console_message(error_msg)
+            
+            # Emit error to web clients
+            self.emit_update_notification('update_applied', {
+                'success': False,
+                'message': error_msg
+            })
+
+    def restart_application(self):
+        """Restart the application"""
+        try:
+            self.add_console_message("🔄 Restarting application...")
+            
+            # Stop server if running
+            if self.server_running:
+                self.stop_server()
+            
+            # Stop monitoring
+            self.stop_performance_monitoring()
+            
+            # Close GUI
+            if hasattr(self, 'root'):
+                self.root.quit()
+            
+            # Restart the application
+            python = sys.executable
+            os.execl(python, python, *sys.argv)
+            
+        except Exception as e:
+            self.add_console_message(f"❌ Failed to restart application: {e}")
+
+    def auto_check_updates(self):
+        """Automatically check for updates periodically"""
+        current_time = time.time()
+        if current_time - self.last_update_check >= self.update_check_interval:
+            self.last_update_check = current_time
+            # Check for updates in background (non-manual)
+            threading.Thread(target=self.check_for_updates, args=(False,), daemon=True).start()
 
     def start_performance_monitoring(self):
         """Start the performance monitoring thread"""
@@ -284,6 +499,14 @@ class MinecraftServerWrapper:
         
         self.web_button = ttk.Button(button_frame, text="🌐 Web Interface", command=self.open_web_interface)
         self.web_button.pack(side=tk.LEFT, padx=5)
+        
+        # Second row of buttons
+        button_frame2 = ttk.Frame(controls_frame)
+        button_frame2.pack(fill=tk.X, pady=(5, 0))
+        
+        self.update_button = ttk.Button(button_frame2, text="🔄 Check for Updates", 
+                                       command=lambda: self.check_for_updates(manual=True))
+        self.update_button.pack(side=tk.LEFT, padx=5)
         
         # Status frame
         status_frame = ttk.LabelFrame(parent, text="Server Status", padding=10)
@@ -909,6 +1132,7 @@ class MinecraftServerWrapper:
                     <button class="btn btn-stop" onclick="stopServer()">⏹ Stop</button>
                     <button class="btn btn-restart" onclick="restartServer()">🔄 Restart</button>
                     <button class="btn btn-optimize" onclick="optimizeRAM()">🧹 Clean RAM</button>
+                    <button class="btn btn-update" onclick="checkForUpdates()" style="background: linear-gradient(45deg, #9b59b6, #8e44ad);">🔄 Check Updates</button>
                 </div>
             </div>
             
@@ -1097,6 +1321,70 @@ class MinecraftServerWrapper:
             })
             .catch(error => showNotification('Error sending command', 'error'));
         }
+        
+        function checkForUpdates() {
+            showNotification('Checking for updates...', 'info');
+            
+            fetch('/api/check-updates', {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(data.error, 'error');
+                    } else if (data.update_available) {
+                        showNotification(data.message, 'info');
+                        // Show update dialog
+                        if (confirm(`${data.message}\n\nWould you like to download and install the update?`)) {
+                            applyUpdate();
+                        }
+                    } else {
+                        showNotification(data.message, 'success');
+                    }
+                })
+                .catch(error => showNotification('Error checking for updates', 'error'));
+        }
+        
+        function applyUpdate() {
+            showNotification('Starting update download...', 'info');
+            
+            fetch('/api/apply-update', {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(data.error, 'error');
+                    } else {
+                        showNotification(data.message, 'info');
+                    }
+                })
+                .catch(error => showNotification('Error applying update', 'error'));
+        }
+        
+        // Socket event listeners for update notifications
+        socket.on('update_available', function(data) {
+            showNotification(`Update available! v${data.current_version} → v${data.latest_version}`, 'info');
+        });
+        
+        socket.on('update_applied', function(data) {
+            if (data.success) {
+                showNotification(data.message, 'success');
+                setTimeout(() => {
+                    if (confirm('Update applied successfully! The application needs to be restarted. Restart now?')) {
+                        location.reload();
+                    }
+                }, 2000);
+            } else {
+                showNotification(data.message, 'error');
+            }
+        });
+        
+        // Check version on page load
+        fetch('/api/version')
+            .then(response => response.json())
+            .then(data => {
+                if (data.update_available) {
+                    showNotification(`Update available! v${data.current_version} → v${data.latest_version}`, 'info');
+                }
+            })
+            .catch(error => console.log('Could not check version'));
     </script>
 </body>
 </html>
@@ -1164,6 +1452,88 @@ class MinecraftServerWrapper:
                 return jsonify({'message': 'Command sent'})
             except Exception as e:
                 return jsonify({'error': f'Failed to send command: {str(e)}'})
+        
+        @self.web_server.route('/api/check-updates', methods=['POST'])
+        def api_check_updates():
+            """Check for application updates"""
+            try:
+                update_available = self.check_for_updates(manual=True)
+                if update_available:
+                    return jsonify({
+                        'update_available': True,
+                        'current_version': self.current_version,
+                        'latest_version': self.latest_version,
+                        'message': f'Update available! v{self.current_version} → v{self.latest_version}'
+                    })
+                else:
+                    return jsonify({
+                        'update_available': False,
+                        'current_version': self.current_version,
+                        'message': f'You\'re running the latest version (v{self.current_version})'
+                    })
+            except Exception as e:
+                return jsonify({'error': f'Failed to check for updates: {str(e)}'})
+        
+        @self.web_server.route('/api/apply-update', methods=['POST'])
+        def api_apply_update():
+            """Apply the available update"""
+            try:
+                if not self.update_available:
+                    return jsonify({'error': 'No update available'})
+                
+                # Start update in background thread
+                threading.Thread(target=self.download_and_apply_update, daemon=True).start()
+                
+                return jsonify({'message': 'Update download started. Check console for progress.'})
+            except Exception as e:
+                return jsonify({'error': f'Failed to apply update: {str(e)}'})
+        
+        @self.web_server.route('/api/version', methods=['GET'])
+        def api_version():
+            """Get current version information"""
+            try:
+                return jsonify({
+                    'current_version': self.current_version,
+                    'update_available': self.update_available,
+                    'latest_version': self.latest_version if self.update_available else None
+                })
+            except Exception as e:
+                return jsonify({'error': f'Failed to get version info: {str(e)}'})
+        
+        # Auto-check for updates periodically
+        def auto_update_check():
+            while True:
+                try:
+                    self.auto_check_updates()
+                    time.sleep(self.update_check_interval)
+                except Exception as e:
+                    print(f"Auto update check error: {e}")
+                    time.sleep(300)  # Wait 5 minutes on error
+        
+        # Start auto-update check thread
+        threading.Thread(target=auto_update_check, daemon=True).start()
+        
+        # Socket.IO events
+        @self.socketio.on('connect')
+        def handle_connect():
+            print(f"Client connected: {request.sid}")
+            # Send current update status to newly connected client
+            if self.update_available:
+                self.socketio.emit('update_available', {
+                    'current_version': self.current_version,
+                    'latest_version': self.latest_version
+                })
+            
+        @self.socketio.on('disconnect')
+        def handle_disconnect():
+            print(f"Client disconnected: {request.sid}")
+
+    def emit_update_notification(self, message_type, data):
+        """Emit update notifications to all connected clients"""
+        try:
+            self.socketio.emit(message_type, data)
+        except Exception as e:
+            print(f"Error emitting update notification: {e}")
 
     def load_config(self):
         """Load configuration from file"""
