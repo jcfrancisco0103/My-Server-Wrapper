@@ -1072,127 +1072,6 @@ class MinecraftServerWrapper:
             background: linear-gradient(45deg, #3498db, #2980b9);
         }
         
-        /* File Manager Styles */
-        .file-manager {
-            margin-top: 15px;
-        }
-        
-        .file-controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .file-path {
-            background: rgba(255,255,255,0.1);
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            color: #ecf0f1;
-            border: 1px solid rgba(255,255,255,0.2);
-            flex: 1;
-            min-width: 200px;
-        }
-        
-        .file-list {
-            background: rgba(0,0,0,0.3);
-            border-radius: 12px;
-            padding: 15px;
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        
-        .file-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px;
-            margin: 5px 0;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .file-item:hover {
-            background: rgba(255,255,255,0.1);
-            transform: translateX(5px);
-        }
-        
-        .file-info {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex: 1;
-        }
-        
-        .file-icon {
-            font-size: 20px;
-            width: 30px;
-            text-align: center;
-        }
-        
-        .file-details {
-            flex: 1;
-        }
-        
-        .file-name {
-            font-weight: 600;
-            color: #ecf0f1;
-            margin-bottom: 2px;
-        }
-        
-        .file-meta {
-            font-size: 12px;
-            color: #bdc3c7;
-        }
-        
-        .file-actions {
-            display: flex;
-            gap: 5px;
-        }
-        
-        .file-btn {
-            padding: 5px 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        
-        .file-btn.rename {
-            background: linear-gradient(45deg, #f39c12, #e67e22);
-            color: white;
-        }
-        
-        .file-btn.delete {
-            background: linear-gradient(45deg, #e74c3c, #c0392b);
-            color: white;
-        }
-        
-        .file-btn.download {
-            background: linear-gradient(45deg, #3498db, #2980b9);
-            color: white;
-        }
-        
-        .file-btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-        
-        .loading {
-            text-align: center;
-            color: #bdc3c7;
-            padding: 20px;
-            font-style: italic;
-        }
-        
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -1222,24 +1101,7 @@ class MinecraftServerWrapper:
                 grid-template-columns: 1fr;
             }
             
-            .file-controls {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .file-path {
-                min-width: auto;
-            }
-            
-            .file-item {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 10px;
-            }
-            
-            .file-actions {
-                justify-content: center;
-            }
+
         }
     </style>
 </head>
@@ -1321,16 +1183,11 @@ class MinecraftServerWrapper:
             
             <div class="card">
                 <h3>📁 File Manager</h3>
-                <div class="file-manager">
-                    <div class="file-controls">
-                        <input type="file" id="fileUpload" multiple style="display: none;" onchange="uploadFiles()">
-                        <button class="btn" onclick="document.getElementById('fileUpload').click()" style="background: linear-gradient(45deg, #27ae60, #2ecc71);">📤 Upload Files</button>
-                        <button class="btn" onclick="refreshFileList()" style="background: linear-gradient(45deg, #3498db, #2980b9);">🔄 Refresh</button>
-                        <span class="file-path" id="currentPath">C:/Users/MersYeon/Desktop/Cacasians</span>
-                    </div>
-                    <div class="file-list" id="fileList">
-                        <div class="loading">Loading files...</div>
-                    </div>
+                <p style="margin-bottom: 20px; opacity: 0.8;">Manage your server files with drag-and-drop functionality</p>
+                <div class="control-buttons">
+                    <a href="/files" class="btn" style="background: linear-gradient(45deg, #27ae60, #2ecc71); color: white; text-decoration: none; display: inline-block; text-align: center;">
+                        📂 Open File Manager
+                    </a>
                 </div>
             </div>
         </div>
@@ -1575,24 +1432,419 @@ class MinecraftServerWrapper:
                 .catch(error => console.log('Could not load console history'));
         }, 1000); // Wait 1 second for Socket.IO to connect first
         
-        // File Manager Functions
-        function refreshFileList() {
-            const fileList = document.getElementById('fileList');
-            fileList.innerHTML = '<div class="loading">Loading files...</div>';
+
+    </script>
+</body>
+</html>
+            ''')
+        
+        @self.web_server.route('/files')
+        def file_manager():
+            return render_template_string('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📁 File Manager - Minecraft Server Wrapper</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        .nav-btn {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .file-manager {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .file-manager h3 {
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+        
+        .file-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            min-width: 120px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            color: white;
+        }
+        
+        .drop-zone {
+            border: 3px dashed rgba(255, 255, 255, 0.5);
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .drop-zone.dragover {
+            border-color: #3498db;
+            background: rgba(52, 152, 219, 0.2);
+            transform: scale(1.02);
+        }
+        
+        .drop-zone-text {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            opacity: 0.8;
+        }
+        
+        .drop-zone-subtext {
+            font-size: 0.9em;
+            opacity: 0.6;
+        }
+        
+        .file-list {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .file-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateX(5px);
+        }
+        
+        .file-icon {
+            font-size: 1.5em;
+            margin-right: 15px;
+            min-width: 30px;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .file-details {
+            font-size: 0.85em;
+            opacity: 0.7;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .btn-download {
+            background: #3498db;
+            color: white;
+        }
+        
+        .btn-rename {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .btn-delete {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .upload-progress {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification.success {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+        }
+        
+        .notification.error {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .file-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .file-list::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        
+        .file-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+        
+        .file-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📁 File Manager</h1>
+            <div class="nav-buttons">
+                <a href="/" class="nav-btn">🏠 Dashboard</a>
+                <button class="nav-btn" onclick="refreshFileList()">🔄 Refresh</button>
+            </div>
+        </div>
+        
+        <div class="file-manager">
+            <div class="file-controls">
+                <input type="file" id="fileInput" multiple>
+                <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                    📤 Select Files
+                </button>
+                <button class="btn btn-success" onclick="refreshFileList()">
+                    🔄 Refresh List
+                </button>
+            </div>
             
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-text">
+                    🎯 Drag and drop files here
+                </div>
+                <div class="drop-zone-subtext">
+                    Or click "Select Files" to browse
+                </div>
+            </div>
+            
+            <div class="upload-progress" id="uploadProgress">
+                <div>Uploading files...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+            
+            <div class="file-list" id="fileList">
+                <div style="text-align: center; opacity: 0.7; padding: 20px;">
+                    Loading files...
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification"></div>
+    
+    <script>
+        // File input change handler
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                uploadFiles(e.target.files);
+            }
+        });
+        
+        // Drag and drop functionality
+        const dropZone = document.getElementById('dropZone');
+        
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFiles(files);
+            }
+        });
+        
+        // Prevent default drag behaviors on the entire document
+        document.addEventListener('dragover', function(e) {
+            e.preventDefault();
+        });
+        
+        document.addEventListener('drop', function(e) {
+            e.preventDefault();
+        });
+        
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        function refreshFileList() {
             fetch('/api/files')
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
-                        fileList.innerHTML = `<div class="loading" style="color: #e74c3c;">Error: ${data.error}</div>`;
+                        showNotification(data.error, 'error');
                         return;
                     }
-                    
                     displayFiles(data.files);
                 })
                 .catch(error => {
-                    fileList.innerHTML = '<div class="loading" style="color: #e74c3c;">Failed to load files</div>';
-                    showNotification('Error loading files', 'error');
+                    console.error('Error fetching files:', error);
+                    showNotification('Failed to load files', 'error');
                 });
         }
         
@@ -1600,78 +1852,66 @@ class MinecraftServerWrapper:
             const fileList = document.getElementById('fileList');
             
             if (files.length === 0) {
-                fileList.innerHTML = '<div class="loading">No files found</div>';
+                fileList.innerHTML = '<div style="text-align: center; opacity: 0.7; padding: 20px;">No files found</div>';
                 return;
             }
             
-            fileList.innerHTML = '';
-            
-            files.forEach(file => {
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
-                
-                const icon = getFileIcon(file.name, file.is_directory);
-                const size = file.is_directory ? 'Directory' : formatFileSize(file.size);
-                const modified = new Date(file.modified * 1000).toLocaleString();
-                
-                fileItem.innerHTML = `
+            fileList.innerHTML = files.map(file => `
+                <div class="file-item">
+                    <div class="file-icon">${getFileIcon(file)}</div>
                     <div class="file-info">
-                        <div class="file-icon">${icon}</div>
+                        <div class="file-name">${file.name}</div>
                         <div class="file-details">
-                            <div class="file-name">${file.name}</div>
-                            <div class="file-meta">${size} • Modified: ${modified}</div>
+                            ${file.is_directory ? 'Directory' : formatFileSize(file.size)} • 
+                            ${new Date(file.modified * 1000).toLocaleString()}
                         </div>
                     </div>
                     <div class="file-actions">
-                        ${!file.is_directory ? `<button class="file-btn download" onclick="downloadFile('${file.name.replace(/'/g, "\\'")}')">📥</button>` : ''}
-                        <button class="file-btn rename" onclick="renameFile('${file.name.replace(/'/g, "\\'")}')">✏️</button>
-                        <button class="file-btn delete" onclick="deleteFile('${file.name.replace(/'/g, "\\'")}')">🗑️</button>
+                        ${!file.is_directory ? `<button class="action-btn btn-download" onclick="downloadFile('${file.name}')">📥 Download</button>` : ''}
+                        <button class="action-btn btn-rename" onclick="renameFile('${file.name}')">✏️ Rename</button>
+                        <button class="action-btn btn-delete" onclick="deleteFile('${file.name}')">🗑️ Delete</button>
                     </div>
-                `;
-                
-                fileList.appendChild(fileItem);
-            });
+                </div>
+            `).join('');
         }
         
-        function getFileIcon(filename, isDirectory) {
-            if (isDirectory) return '📁';
+        function getFileIcon(file) {
+            if (file.is_directory) return '📁';
             
-            const ext = filename.split('.').pop().toLowerCase();
+            const ext = file.extension.toLowerCase();
             const iconMap = {
-                'zip': '📦', 'rar': '📦', '7z': '📦',
-                'txt': '📄', 'md': '📄', 'log': '📄',
-                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
-                'mp4': '🎥', 'avi': '🎥', 'mov': '🎥',
-                'mp3': '🎵', 'wav': '🎵', 'flac': '🎵',
-                'pdf': '📕', 'doc': '📘', 'docx': '📘',
-                'jar': '☕', 'java': '☕',
-                'py': '🐍', 'js': '📜', 'html': '🌐',
-                'exe': '⚙️', 'msi': '⚙️'
+                '.txt': '📄', '.doc': '📄', '.docx': '📄', '.pdf': '📄',
+                '.jpg': '🖼️', '.jpeg': '🖼️', '.png': '🖼️', '.gif': '🖼️', '.bmp': '🖼️',
+                '.mp4': '🎬', '.avi': '🎬', '.mov': '🎬', '.wmv': '🎬',
+                '.mp3': '🎵', '.wav': '🎵', '.flac': '🎵', '.aac': '🎵',
+                '.zip': '📦', '.rar': '📦', '.7z': '📦', '.tar': '📦',
+                '.exe': '⚙️', '.msi': '⚙️', '.deb': '⚙️', '.dmg': '⚙️',
+                '.js': '💻', '.html': '💻', '.css': '💻', '.py': '💻', '.java': '💻',
+                '.jar': '☕', '.properties': '⚙️', '.yml': '⚙️', '.yaml': '⚙️', '.json': '⚙️'
             };
             
             return iconMap[ext] || '📄';
         }
         
         function formatFileSize(bytes) {
-            if (bytes === 0) return '0 B';
+            if (bytes === 0) return '0 Bytes';
             const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
         
-        function uploadFiles() {
-            const fileInput = document.getElementById('fileUpload');
-            const files = fileInput.files;
-            
-            if (files.length === 0) return;
-            
+        function uploadFiles(files) {
             const formData = new FormData();
-            for (let i = 0; i < files.length; i++) {
-                formData.append('files', files[i]);
+            for (let file of files) {
+                formData.append('files', file);
             }
             
-            showNotification(`Uploading ${files.length} file(s)...`, 'info');
+            const progressContainer = document.getElementById('uploadProgress');
+            const progressFill = document.getElementById('progressFill');
+            
+            progressContainer.style.display = 'block';
+            progressFill.style.width = '0%';
             
             fetch('/api/files/upload', {
                 method: 'POST',
@@ -1679,68 +1919,103 @@ class MinecraftServerWrapper:
             })
             .then(response => response.json())
             .then(data => {
+                progressContainer.style.display = 'none';
+                
                 if (data.error) {
                     showNotification(data.error, 'error');
                 } else {
                     showNotification(data.message, 'success');
                     refreshFileList();
-                    fileInput.value = ''; // Clear the input
                 }
+                
+                // Reset file input
+                document.getElementById('fileInput').value = '';
             })
             .catch(error => {
-                showNotification('Error uploading files', 'error');
+                progressContainer.style.display = 'none';
+                console.error('Error uploading files:', error);
+                showNotification('Failed to upload files', 'error');
+                document.getElementById('fileInput').value = '';
             });
+            
+            // Simulate progress (since we can't get real progress easily)
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += Math.random() * 30;
+                if (progress > 90) progress = 90;
+                progressFill.style.width = progress + '%';
+            }, 200);
+            
+            setTimeout(() => {
+                clearInterval(progressInterval);
+                progressFill.style.width = '100%';
+            }, 2000);
         }
         
         function downloadFile(filename) {
             window.open(`/api/files/download/${encodeURIComponent(filename)}`, '_blank');
         }
         
-        function renameFile(oldName) {
-            const newName = prompt(`Rename "${oldName}" to:`, oldName);
-            if (!newName || newName === oldName) return;
-            
-            fetch('/api/files/rename', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({old_name: oldName, new_name: newName})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    showNotification(data.error, 'error');
-                } else {
-                    showNotification(data.message, 'success');
-                    refreshFileList();
-                }
-            })
-            .catch(error => showNotification('Error renaming file', 'error'));
+        function renameFile(filename) {
+            const newName = prompt(`Rename "${filename}" to:`, filename);
+            if (newName && newName !== filename) {
+                fetch('/api/files/rename', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        old_name: filename,
+                        new_name: newName
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(data.error, 'error');
+                    } else {
+                        showNotification(data.message, 'success');
+                        refreshFileList();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error renaming file:', error);
+                    showNotification('Failed to rename file', 'error');
+                });
+            }
         }
         
         function deleteFile(filename) {
-            if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
-            
-            fetch('/api/files/delete', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({filename: filename})
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    showNotification(data.error, 'error');
-                } else {
-                    showNotification(data.message, 'success');
-                    refreshFileList();
-                }
-            })
-            .catch(error => showNotification('Error deleting file', 'error'));
+            if (confirm(`Are you sure you want to delete "${filename}"?`)) {
+                fetch('/api/files/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filename: filename
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(data.error, 'error');
+                    } else {
+                        showNotification(data.message, 'success');
+                        refreshFileList();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting file:', error);
+                    showNotification('Failed to delete file', 'error');
+                });
+            }
         }
         
         // Load file list on page load
         setTimeout(() => {
             refreshFileList();
-        }, 1500);
+        }, 500);
     </script>
 </body>
 </html>
