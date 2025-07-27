@@ -1072,6 +1072,127 @@ class MinecraftServerWrapper:
             background: linear-gradient(45deg, #3498db, #2980b9);
         }
         
+        /* File Manager Styles */
+        .file-manager {
+            margin-top: 15px;
+        }
+        
+        .file-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .file-path {
+            background: rgba(255,255,255,0.1);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #ecf0f1;
+            border: 1px solid rgba(255,255,255,0.2);
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .file-list {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .file-item:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateX(5px);
+        }
+        
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+        
+        .file-icon {
+            font-size: 20px;
+            width: 30px;
+            text-align: center;
+        }
+        
+        .file-details {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            color: #ecf0f1;
+            margin-bottom: 2px;
+        }
+        
+        .file-meta {
+            font-size: 12px;
+            color: #bdc3c7;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .file-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .file-btn.rename {
+            background: linear-gradient(45deg, #f39c12, #e67e22);
+            color: white;
+        }
+        
+        .file-btn.delete {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+            color: white;
+        }
+        
+        .file-btn.download {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+        }
+        
+        .file-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        .loading {
+            text-align: center;
+            color: #bdc3c7;
+            padding: 20px;
+            font-style: italic;
+        }
+        
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: 1fr;
@@ -1099,6 +1220,25 @@ class MinecraftServerWrapper:
             
             .performance-grid {
                 grid-template-columns: 1fr;
+            }
+            
+            .file-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .file-path {
+                min-width: auto;
+            }
+            
+            .file-item {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+            
+            .file-actions {
+                justify-content: center;
             }
         }
     </style>
@@ -1178,6 +1318,21 @@ class MinecraftServerWrapper:
                     <button onclick="sendCommand()">Send</button>
                 </div>
             </div>
+            
+            <div class="card">
+                <h3>📁 File Manager</h3>
+                <div class="file-manager">
+                    <div class="file-controls">
+                        <input type="file" id="fileUpload" multiple style="display: none;" onchange="uploadFiles()">
+                        <button class="btn" onclick="document.getElementById('fileUpload').click()" style="background: linear-gradient(45deg, #27ae60, #2ecc71);">📤 Upload Files</button>
+                        <button class="btn" onclick="refreshFileList()" style="background: linear-gradient(45deg, #3498db, #2980b9);">🔄 Refresh</button>
+                        <span class="file-path" id="currentPath">C:/Users/MersYeon/Desktop/Cacasians</span>
+                    </div>
+                    <div class="file-list" id="fileList">
+                        <div class="loading">Loading files...</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -1205,6 +1360,10 @@ class MinecraftServerWrapper:
         
         socket.on('console_update', function(data) {
             updateConsoleRealtime(data);
+        });
+        
+        socket.on('console_history', function(logs) {
+            loadConsoleHistory(logs);
         });
         
         socket.on('ram_optimized', function(data) {
@@ -1260,6 +1419,20 @@ class MinecraftServerWrapper:
                 console.appendChild(logEntry);
                 console.scrollTop = console.scrollHeight;
             }
+        }
+        
+        function loadConsoleHistory(logs) {
+            const console = document.getElementById('console');
+            console.innerHTML = ''; // Clear existing content
+            
+            logs.forEach(log => {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'console-line';
+                logEntry.innerHTML = `<span class="console-timestamp">[${log.timestamp}]</span> ${log.message}`;
+                console.appendChild(logEntry);
+            });
+            
+            console.scrollTop = console.scrollHeight;
         }
         
         function showNotification(message, type = 'success') {
@@ -1385,6 +1558,189 @@ class MinecraftServerWrapper:
                 }
             })
             .catch(error => console.log('Could not check version'));
+        
+        // Load console history on page load (fallback if Socket.IO doesn't work)
+        setTimeout(() => {
+            fetch('/api/console')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.logs && data.logs.length > 0) {
+                        // Only load if console is empty (Socket.IO didn't work)
+                        const console = document.getElementById('console');
+                        if (console.children.length === 0) {
+                            loadConsoleHistory(data.logs);
+                        }
+                    }
+                })
+                .catch(error => console.log('Could not load console history'));
+        }, 1000); // Wait 1 second for Socket.IO to connect first
+        
+        // File Manager Functions
+        function refreshFileList() {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<div class="loading">Loading files...</div>';
+            
+            fetch('/api/files')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        fileList.innerHTML = `<div class="loading" style="color: #e74c3c;">Error: ${data.error}</div>`;
+                        return;
+                    }
+                    
+                    displayFiles(data.files);
+                })
+                .catch(error => {
+                    fileList.innerHTML = '<div class="loading" style="color: #e74c3c;">Failed to load files</div>';
+                    showNotification('Error loading files', 'error');
+                });
+        }
+        
+        function displayFiles(files) {
+            const fileList = document.getElementById('fileList');
+            
+            if (files.length === 0) {
+                fileList.innerHTML = '<div class="loading">No files found</div>';
+                return;
+            }
+            
+            fileList.innerHTML = '';
+            
+            files.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                
+                const icon = getFileIcon(file.name, file.is_directory);
+                const size = file.is_directory ? 'Directory' : formatFileSize(file.size);
+                const modified = new Date(file.modified * 1000).toLocaleString();
+                
+                fileItem.innerHTML = `
+                    <div class="file-info">
+                        <div class="file-icon">${icon}</div>
+                        <div class="file-details">
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-meta">${size} • Modified: ${modified}</div>
+                        </div>
+                    </div>
+                    <div class="file-actions">
+                        ${!file.is_directory ? `<button class="file-btn download" onclick="downloadFile('${file.name.replace(/'/g, "\\'")}')">📥</button>` : ''}
+                        <button class="file-btn rename" onclick="renameFile('${file.name.replace(/'/g, "\\'")}')">✏️</button>
+                        <button class="file-btn delete" onclick="deleteFile('${file.name.replace(/'/g, "\\'")}')">🗑️</button>
+                    </div>
+                `;
+                
+                fileList.appendChild(fileItem);
+            });
+        }
+        
+        function getFileIcon(filename, isDirectory) {
+            if (isDirectory) return '📁';
+            
+            const ext = filename.split('.').pop().toLowerCase();
+            const iconMap = {
+                'zip': '📦', 'rar': '📦', '7z': '📦',
+                'txt': '📄', 'md': '📄', 'log': '📄',
+                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
+                'mp4': '🎥', 'avi': '🎥', 'mov': '🎥',
+                'mp3': '🎵', 'wav': '🎵', 'flac': '🎵',
+                'pdf': '📕', 'doc': '📘', 'docx': '📘',
+                'jar': '☕', 'java': '☕',
+                'py': '🐍', 'js': '📜', 'html': '🌐',
+                'exe': '⚙️', 'msi': '⚙️'
+            };
+            
+            return iconMap[ext] || '📄';
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function uploadFiles() {
+            const fileInput = document.getElementById('fileUpload');
+            const files = fileInput.files;
+            
+            if (files.length === 0) return;
+            
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+            
+            showNotification(`Uploading ${files.length} file(s)...`, 'info');
+            
+            fetch('/api/files/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showNotification(data.error, 'error');
+                } else {
+                    showNotification(data.message, 'success');
+                    refreshFileList();
+                    fileInput.value = ''; // Clear the input
+                }
+            })
+            .catch(error => {
+                showNotification('Error uploading files', 'error');
+            });
+        }
+        
+        function downloadFile(filename) {
+            window.open(`/api/files/download/${encodeURIComponent(filename)}`, '_blank');
+        }
+        
+        function renameFile(oldName) {
+            const newName = prompt(`Rename "${oldName}" to:`, oldName);
+            if (!newName || newName === oldName) return;
+            
+            fetch('/api/files/rename', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({old_name: oldName, new_name: newName})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showNotification(data.error, 'error');
+                } else {
+                    showNotification(data.message, 'success');
+                    refreshFileList();
+                }
+            })
+            .catch(error => showNotification('Error renaming file', 'error'));
+        }
+        
+        function deleteFile(filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
+            
+            fetch('/api/files/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filename: filename})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showNotification(data.error, 'error');
+                } else {
+                    showNotification(data.message, 'success');
+                    refreshFileList();
+                }
+            })
+            .catch(error => showNotification('Error deleting file', 'error'));
+        }
+        
+        // Load file list on page load
+        setTimeout(() => {
+            refreshFileList();
+        }, 1500);
     </script>
 </body>
 </html>
@@ -1500,6 +1856,175 @@ class MinecraftServerWrapper:
             except Exception as e:
                 return jsonify({'error': f'Failed to get version info: {str(e)}'})
         
+        @self.web_server.route('/api/console', methods=['GET'])
+        def api_console():
+            """Get console history"""
+            try:
+                # Get the last 100 console entries
+                recent_logs = self.console_history[-100:] if len(self.console_history) > 100 else self.console_history
+                return jsonify({'logs': recent_logs})
+            except Exception as e:
+                return jsonify({'error': f'Failed to get console logs: {str(e)}'})
+        
+        # File Manager API endpoints
+        @self.web_server.route('/api/files', methods=['GET'])
+        def api_files():
+            """Get list of files in the managed directory"""
+            try:
+                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                
+                if not os.path.exists(file_manager_path):
+                    os.makedirs(file_manager_path, exist_ok=True)
+                
+                files = []
+                for item in os.listdir(file_manager_path):
+                    item_path = os.path.join(file_manager_path, item)
+                    stat = os.stat(item_path)
+                    
+                    files.append({
+                        'name': item,
+                        'size': stat.st_size,
+                        'modified': stat.st_mtime,
+                        'is_directory': os.path.isdir(item_path),
+                        'extension': os.path.splitext(item)[1].lower() if not os.path.isdir(item_path) else ''
+                    })
+                
+                # Sort files: directories first, then by name
+                files.sort(key=lambda x: (not x['is_directory'], x['name'].lower()))
+                
+                return jsonify({'files': files, 'path': file_manager_path})
+            except Exception as e:
+                return jsonify({'error': f'Failed to list files: {str(e)}'})
+        
+        @self.web_server.route('/api/files/upload', methods=['POST'])
+        def api_files_upload():
+            """Upload files to the managed directory"""
+            try:
+                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                
+                if not os.path.exists(file_manager_path):
+                    os.makedirs(file_manager_path, exist_ok=True)
+                
+                if 'files' not in request.files:
+                    return jsonify({'error': 'No files provided'})
+                
+                uploaded_files = []
+                for file in request.files.getlist('files'):
+                    if file.filename == '':
+                        continue
+                    
+                    # Secure filename
+                    filename = file.filename
+                    # Remove any path components for security
+                    filename = os.path.basename(filename)
+                    
+                    file_path = os.path.join(file_manager_path, filename)
+                    
+                    # Handle duplicate filenames
+                    counter = 1
+                    original_name, ext = os.path.splitext(filename)
+                    while os.path.exists(file_path):
+                        filename = f"{original_name}_{counter}{ext}"
+                        file_path = os.path.join(file_manager_path, filename)
+                        counter += 1
+                    
+                    file.save(file_path)
+                    uploaded_files.append(filename)
+                
+                if uploaded_files:
+                    return jsonify({'message': f'Successfully uploaded {len(uploaded_files)} file(s)', 'files': uploaded_files})
+                else:
+                    return jsonify({'error': 'No valid files to upload'})
+                    
+            except Exception as e:
+                return jsonify({'error': f'Failed to upload files: {str(e)}'})
+        
+        @self.web_server.route('/api/files/rename', methods=['POST'])
+        def api_files_rename():
+            """Rename a file in the managed directory"""
+            try:
+                data = request.get_json()
+                old_name = data.get('old_name')
+                new_name = data.get('new_name')
+                
+                if not old_name or not new_name:
+                    return jsonify({'error': 'Both old_name and new_name are required'})
+                
+                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                old_path = os.path.join(file_manager_path, old_name)
+                new_path = os.path.join(file_manager_path, new_name)
+                
+                if not os.path.exists(old_path):
+                    return jsonify({'error': 'File not found'})
+                
+                if os.path.exists(new_path):
+                    return jsonify({'error': 'A file with that name already exists'})
+                
+                # Security check: ensure paths are within the managed directory
+                if not old_path.startswith(file_manager_path) or not new_path.startswith(file_manager_path):
+                    return jsonify({'error': 'Invalid file path'})
+                
+                os.rename(old_path, new_path)
+                return jsonify({'message': f'Successfully renamed "{old_name}" to "{new_name}"'})
+                
+            except Exception as e:
+                return jsonify({'error': f'Failed to rename file: {str(e)}'})
+        
+        @self.web_server.route('/api/files/delete', methods=['POST'])
+        def api_files_delete():
+            """Delete a file from the managed directory"""
+            try:
+                data = request.get_json()
+                filename = data.get('filename')
+                
+                if not filename:
+                    return jsonify({'error': 'Filename is required'})
+                
+                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                file_path = os.path.join(file_manager_path, filename)
+                
+                if not os.path.exists(file_path):
+                    return jsonify({'error': 'File not found'})
+                
+                # Security check: ensure path is within the managed directory
+                if not file_path.startswith(file_manager_path):
+                    return jsonify({'error': 'Invalid file path'})
+                
+                if os.path.isdir(file_path):
+                    # Remove directory and all contents
+                    import shutil
+                    shutil.rmtree(file_path)
+                else:
+                    # Remove file
+                    os.remove(file_path)
+                
+                return jsonify({'message': f'Successfully deleted "{filename}"'})
+                
+            except Exception as e:
+                return jsonify({'error': f'Failed to delete file: {str(e)}'})
+        
+        @self.web_server.route('/api/files/download/<filename>')
+        def api_files_download(filename):
+            """Download a file from the managed directory"""
+            try:
+                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                file_path = os.path.join(file_manager_path, filename)
+                
+                if not os.path.exists(file_path):
+                    return jsonify({'error': 'File not found'}), 404
+                
+                # Security check: ensure path is within the managed directory
+                if not file_path.startswith(file_manager_path):
+                    return jsonify({'error': 'Invalid file path'}), 403
+                
+                if os.path.isdir(file_path):
+                    return jsonify({'error': 'Cannot download directories'}), 400
+                
+                return send_file(file_path, as_attachment=True, download_name=filename)
+                
+            except Exception as e:
+                return jsonify({'error': f'Failed to download file: {str(e)}'}), 500
+        
         # Auto-check for updates periodically
         def auto_update_check():
             while True:
@@ -1517,12 +2042,17 @@ class MinecraftServerWrapper:
         @self.socketio.on('connect')
         def handle_connect():
             print(f"Client connected: {request.sid}")
+            
+            # Send console history to newly connected client
+            recent_logs = self.console_history[-100:] if len(self.console_history) > 100 else self.console_history
+            self.socketio.emit('console_history', recent_logs, room=request.sid)
+            
             # Send current update status to newly connected client
             if self.update_available:
                 self.socketio.emit('update_available', {
                     'current_version': self.current_version,
                     'latest_version': self.latest_version
-                })
+                }, room=request.sid)
             
         @self.socketio.on('disconnect')
         def handle_disconnect():
