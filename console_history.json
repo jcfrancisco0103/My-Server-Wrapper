@@ -226,5 +226,57 @@
   {
     "timestamp": "17:47:13",
     "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "19:10:18",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "19:10:18",
+    "message": "🎉 Update available! Current: v1.0.0 → Latest: v1.2.0"
+  },
+  {
+    "timestamp": "19:14:34",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "19:14:34",
+    "message": "🎉 Update available! Current: v1.0.0 → Latest: v1.0.1"
+  },
+  {
+    "timestamp": "19:14:36",
+    "message": "📥 Downloading update..."
+  },
+  {
+    "timestamp": "19:14:36",
+    "message": "📋 Backup created: backup\\minecraft_server_wrapper_v1.0.0_backup.py"
+  },
+  {
+    "timestamp": "19:14:38",
+    "message": "✅ Update downloaded and applied successfully!"
+  },
+  {
+    "timestamp": "19:14:38",
+    "message": "🔄 Please restart the application to use v1.0.1"
+  },
+  {
+    "timestamp": "19:14:39",
+    "message": "🔄 Restarting application..."
+  },
+  {
+    "timestamp": "19:14:42",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "19:27:18",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "19:29:21",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "19:29:49",
+    "message": "Web interface started on http://localhost:5000"
   }
 ]
