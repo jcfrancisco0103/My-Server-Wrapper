@@ -122,5 +122,13 @@
   {
     "timestamp": "17:01:21",
     "message": "❌ Invalid version format in release: 'filesmanager'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:02:17",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:02:17",
+    "message": "❌ Invalid version format in release: 'filesmanager'. Expected format: v1.0.0"
   }
 ]
