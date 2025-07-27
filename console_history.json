@@ -130,5 +130,81 @@
   {
     "timestamp": "17:02:17",
     "message": "❌ Invalid version format in release: 'filesmanager'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:05:22",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:05:22",
+    "message": "❌ Invalid version format in release: 'version'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:05:26",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:05:26",
+    "message": "❌ Invalid version format in release: 'version'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:05:41",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:05:41",
+    "message": "❌ Invalid version format in release: 'version'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:05:42",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:05:42",
+    "message": "❌ Invalid version format in release: 'update'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:05:42",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:05:42",
+    "message": "❌ Invalid version format in release: 'update'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:05:42",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:05:43",
+    "message": "❌ Invalid version format in release: 'update'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:05:43",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:05:43",
+    "message": "❌ Invalid version format in release: 'update'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:07:04",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "17:07:06",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:07:07",
+    "message": "❌ Invalid version format in release: 'update'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:07:51",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:07:51",
+    "message": "✅ You're running the latest version (v2.2.0)"
   }
 ]
