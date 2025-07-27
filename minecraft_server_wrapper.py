@@ -145,10 +145,43 @@ class MinecraftServerWrapper:
             response.raise_for_status()
             
             release_data = response.json()
-            latest_version = release_data['tag_name'].lstrip('v')
+            
+            # Debug: Log the response for troubleshooting
+            if manual:
+                print(f"GitHub API Response: {release_data}")
+            
+            # Validate the response structure
+            if 'tag_name' not in release_data:
+                error_msg = "❌ No releases found in the repository"
+                if manual:
+                    self.add_console_message(error_msg)
+                return False
+            
+            # Extract and validate version
+            tag_name = release_data['tag_name']
+            latest_version = tag_name.lstrip('v')
+            
+            # Validate that the version string looks like a version number
+            import re
+            if not re.match(r'^\d+\.\d+(\.\d+)?', latest_version):
+                error_msg = f"❌ Invalid version format in release: '{tag_name}'. Expected format: v1.0.0"
+                if manual:
+                    self.add_console_message(error_msg)
+                print(error_msg)
+                return False
             
             # Compare versions using packaging.version
-            if version.parse(latest_version) > version.parse(self.current_version):
+            try:
+                current_parsed = version.parse(self.current_version)
+                latest_parsed = version.parse(latest_version)
+            except Exception as e:
+                error_msg = f"❌ Version parsing error: {e}"
+                if manual:
+                    self.add_console_message(error_msg)
+                print(error_msg)
+                return False
+            
+            if latest_parsed > current_parsed:
                 self.update_available = True
                 self.latest_version = latest_version
                 

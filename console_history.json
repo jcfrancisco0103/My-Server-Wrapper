@@ -102,5 +102,25 @@
   {
     "timestamp": "16:54:48",
     "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "16:58:52",
+    "message": "Web interface started on http://localhost:5000"
+  },
+  {
+    "timestamp": "17:01:06",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:01:06",
+    "message": "❌ Invalid version format in release: 'filesmanager'. Expected format: v1.0.0"
+  },
+  {
+    "timestamp": "17:01:20",
+    "message": "🔍 Checking for updates..."
+  },
+  {
+    "timestamp": "17:01:21",
+    "message": "❌ Invalid version format in release: 'filesmanager'. Expected format: v1.0.0"
   }
 ]
