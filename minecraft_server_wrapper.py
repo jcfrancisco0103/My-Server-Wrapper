@@ -23,14 +23,16 @@ import shutil
 from packaging import version
 
 # Flask and SocketIO imports
-from flask import Flask, render_template_string, request, jsonify, send_file
+from flask import Flask, render_template_string, request, jsonify, send_file, session, redirect, url_for
 from flask_socketio import SocketIO, emit
 from werkzeug.serving import make_server
+import hashlib
+from functools import wraps
 
 class MinecraftServerWrapper:
     def __init__(self):
         # Application version and update settings
-        self.current_version = "1.0.0"  # Current app version
+        self.current_version = "2.0.0"  # Current app version - Added Authentication System
         self.github_repo = "jcfrancisco0103/My-Server-Wrapper"  # Your GitHub repo
         self.github_api_url = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
         self.update_check_interval = 3600  # Check for updates every hour (in seconds)
@@ -69,10 +71,25 @@ class MinecraftServerWrapper:
         
         # Web server
         self.web_server = Flask(__name__)
-        self.web_server.config['SECRET_KEY'] = 'minecraft_wrapper_secret'
+        self.web_server.config['SECRET_KEY'] = 'minecraft_wrapper_secret_key_2024'
         self.socketio = SocketIO(self.web_server, cors_allowed_origins="*")
         self.web_thread = None
         self.server_instance = None
+        
+        # User authentication system
+        self.users_file = "users.json"
+        self.pending_registrations_file = "pending_registrations.json"
+        self.sessions_file = "sessions.json"
+        self.users = {}
+        self.pending_registrations = {}
+        self.active_sessions = {}
+        
+        # Load existing user data
+        self.load_users()
+        self.load_pending_registrations()
+        
+        # Create default admin if no users exist
+        self.create_default_admin()
         
         # Load configuration
         self.load_config()
@@ -822,10 +839,637 @@ class MinecraftServerWrapper:
         except Exception as e:
             print(f"Web server error: {e}")
 
+    # Authentication System
+    def create_default_admin(self):
+        """Create a default admin user if no users exist"""
+        if not self.users:
+            default_admin = {
+                'username': 'admin',
+                'password': self.hash_password('admin123'),
+                'is_admin': True,
+                'approved': True
+            }
+            self.users['admin'] = default_admin
+            self.save_users()
+            print("Default admin user created: username='admin', password='admin123'")
+            print("Please change the default password after first login!")
+
+    def load_users(self):
+        """Load users from file"""
+        try:
+            if os.path.exists(self.users_file):
+                with open(self.users_file, 'r') as f:
+                    self.users = json.load(f)
+            else:
+                # Create default admin user if no users exist
+                self.users = {
+                    "admin": {
+                        "password_hash": self.hash_password("admin123"),
+                        "role": "admin",
+                        "approved": True,
+                        "created_at": datetime.now().isoformat()
+                    }
+                }
+                self.save_users()
+        except Exception as e:
+            print(f"Error loading users: {e}")
+            self.users = {}
+
+    def save_users(self):
+        """Save users to file"""
+        try:
+            with open(self.users_file, 'w') as f:
+                json.dump(self.users, f, indent=2)
+        except Exception as e:
+            print(f"Error saving users: {e}")
+
+    def load_pending_registrations(self):
+        """Load pending registrations from file"""
+        try:
+            if os.path.exists(self.pending_registrations_file):
+                with open(self.pending_registrations_file, 'r') as f:
+                    self.pending_registrations = json.load(f)
+            else:
+                self.pending_registrations = {}
+        except Exception as e:
+            print(f"Error loading pending registrations: {e}")
+            self.pending_registrations = {}
+
+    def save_pending_registrations(self):
+        """Save pending registrations to file"""
+        try:
+            with open(self.pending_registrations_file, 'w') as f:
+                json.dump(self.pending_registrations, f, indent=2)
+        except Exception as e:
+            print(f"Error saving pending registrations: {e}")
+
+    def hash_password(self, password):
+        """Hash password using SHA-256"""
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def verify_password(self, password, password_hash):
+        """Verify password against hash"""
+        return self.hash_password(password) == password_hash
+
+    def is_authenticated(self):
+        """Check if current session is authenticated"""
+        return 'user_id' in session and session['user_id'] in self.users
+
+    def is_admin(self):
+        """Check if current user is admin"""
+        if not self.is_authenticated():
+            return False
+        user = self.users.get(session['user_id'])
+        return user and user.get('role') == 'admin'
+
+    def require_auth(self, f):
+        """Decorator to require authentication"""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not self.is_authenticated():
+                if request.is_json:
+                    return jsonify({'error': 'Authentication required'}), 401
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+
+    def require_admin(self, f):
+        """Decorator to require admin privileges"""
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not self.is_admin():
+                if request.is_json:
+                    return jsonify({'error': 'Admin privileges required'}), 403
+                return redirect(url_for('login'))
+            return f(*args, **kwargs)
+        return decorated_function
+
+    def get_login_template(self, error=None):
+        """Return the login page template"""
+        return f'''
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Login - Minecraft Server Manager</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    margin: 0;
+                    padding: 0;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }}
+                .login-container {{
+                    background: white;
+                    padding: 2rem;
+                    border-radius: 10px;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+                    width: 100%;
+                    max-width: 400px;
+                }}
+                .login-header {{
+                    text-align: center;
+                    margin-bottom: 2rem;
+                }}
+                .login-header h1 {{
+                    color: #333;
+                    margin-bottom: 0.5rem;
+                }}
+                .form-group {{
+                    margin-bottom: 1rem;
+                }}
+                .form-group label {{
+                    display: block;
+                    margin-bottom: 0.5rem;
+                    color: #555;
+                    font-weight: 500;
+                }}
+                .form-group input {{
+                    width: 100%;
+                    padding: 0.75rem;
+                    border: 1px solid #ddd;
+                    border-radius: 5px;
+                    font-size: 1rem;
+                    box-sizing: border-box;
+                }}
+                .form-group input:focus {{
+                    outline: none;
+                    border-color: #667eea;
+                    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+                }}
+                .btn {{
+                    width: 100%;
+                    padding: 0.75rem;
+                    background: #667eea;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    font-size: 1rem;
+                    cursor: pointer;
+                    transition: background 0.3s;
+                }}
+                .btn:hover {{
+                    background: #5a6fd8;
+                }}
+                .error {{
+                    background: #fee;
+                    color: #c33;
+                    padding: 0.75rem;
+                    border-radius: 5px;
+                    margin-bottom: 1rem;
+                    border: 1px solid #fcc;
+                }}
+                .register-link {{
+                    text-align: center;
+                    margin-top: 1rem;
+                }}
+                .register-link a {{
+                    color: #667eea;
+                    text-decoration: none;
+                }}
+                .register-link a:hover {{
+                    text-decoration: underline;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="login-container">
+                <div class="login-header">
+                    <h1>Login</h1>
+                    <p>Minecraft Server Manager</p>
+                </div>
+                
+                {"<div class='error'>" + error + "</div>" if error else ""}
+                
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    
+                    <button type="submit" class="btn">Login</button>
+                </form>
+                
+                <div class="register-link">
+                    <p>Don't have an account? <a href="/register">Register here</a></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        '''
+    
+    def get_register_template(self, error=None, success_message=None):
+        """Return the register page template"""
+        return f'''
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Register - Minecraft Server Manager</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    margin: 0;
+                    padding: 0;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }}
+                .register-container {{
+                    background: white;
+                    padding: 2rem;
+                    border-radius: 10px;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+                    width: 100%;
+                    max-width: 400px;
+                }}
+                .register-header {{
+                    text-align: center;
+                    margin-bottom: 2rem;
+                }}
+                .register-header h1 {{
+                    color: #333;
+                    margin-bottom: 0.5rem;
+                }}
+                .form-group {{
+                    margin-bottom: 1rem;
+                }}
+                .form-group label {{
+                    display: block;
+                    margin-bottom: 0.5rem;
+                    color: #555;
+                    font-weight: 500;
+                }}
+                .form-group input {{
+                    width: 100%;
+                    padding: 0.75rem;
+                    border: 1px solid #ddd;
+                    border-radius: 5px;
+                    font-size: 1rem;
+                    box-sizing: border-box;
+                }}
+                .form-group input:focus {{
+                    outline: none;
+                    border-color: #667eea;
+                    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+                }}
+                .btn {{
+                    width: 100%;
+                    padding: 0.75rem;
+                    background: #667eea;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    font-size: 1rem;
+                    cursor: pointer;
+                    transition: background 0.3s;
+                }}
+                .btn:hover {{
+                    background: #5a6fd8;
+                }}
+                .error {{
+                    background: #fee;
+                    color: #c33;
+                    padding: 0.75rem;
+                    border-radius: 5px;
+                    margin-bottom: 1rem;
+                    border: 1px solid #fcc;
+                }}
+                .success {{
+                    background: #efe;
+                    color: #3c3;
+                    padding: 0.75rem;
+                    border-radius: 5px;
+                    margin-bottom: 1rem;
+                    border: 1px solid #cfc;
+                }}
+                .login-link {{
+                    text-align: center;
+                    margin-top: 1rem;
+                }}
+                .login-link a {{
+                    color: #667eea;
+                    text-decoration: none;
+                }}
+                .login-link a:hover {{
+                    text-decoration: underline;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="register-container">
+                <div class="register-header">
+                    <h1>Register</h1>
+                    <p>Minecraft Server Manager</p>
+                </div>
+                
+                {"<div class='error'>" + error + "</div>" if error else ""}
+                {"<div class='success'>" + success_message + "</div>" if success_message else ""}
+                
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="username">Username:</label>
+                        <input type="text" id="username" name="username" required minlength="3">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email (optional):</label>
+                        <input type="email" id="email" name="email">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Password:</label>
+                        <input type="password" id="password" name="password" required minlength="6">
+                    </div>
+                    
+                    <button type="submit" class="btn">Register</button>
+                </form>
+                
+                <div class="login-link">
+                    <p>Already have an account? <a href="/login">Login here</a></p>
+                </div>
+            </div>
+        </body>
+        </html>
+        '''
+    
+    def get_admin_template(self):
+        """Return the admin panel template"""
+        return '''
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Admin Panel - Minecraft Server Manager</title>
+            <style>
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: #f5f5f5;
+                    margin: 0;
+                    padding: 20px;
+                }
+                .admin-container {
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    background: white;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    overflow: hidden;
+                }
+                .admin-header {
+                    background: #667eea;
+                    color: white;
+                    padding: 1.5rem;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .admin-header h1 {
+                    margin: 0;
+                }
+                .nav-links a {
+                    color: white;
+                    text-decoration: none;
+                    margin-left: 1rem;
+                    padding: 0.5rem 1rem;
+                    border-radius: 5px;
+                    transition: background 0.3s;
+                }
+                .nav-links a:hover {
+                    background: rgba(255,255,255,0.2);
+                }
+                .admin-content {
+                    padding: 2rem;
+                }
+                .section {
+                    margin-bottom: 2rem;
+                }
+                .section h2 {
+                    color: #333;
+                    border-bottom: 2px solid #667eea;
+                    padding-bottom: 0.5rem;
+                }
+                .pending-users {
+                    background: #f9f9f9;
+                    border-radius: 5px;
+                    padding: 1rem;
+                }
+                .user-item {
+                    background: white;
+                    border: 1px solid #ddd;
+                    border-radius: 5px;
+                    padding: 1rem;
+                    margin-bottom: 1rem;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .user-info {
+                    flex-grow: 1;
+                }
+                .user-info h3 {
+                    margin: 0 0 0.5rem 0;
+                    color: #333;
+                }
+                .user-info p {
+                    margin: 0;
+                    color: #666;
+                    font-size: 0.9rem;
+                }
+                .user-actions {
+                    display: flex;
+                    gap: 0.5rem;
+                }
+                .btn {
+                    padding: 0.5rem 1rem;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    font-size: 0.9rem;
+                    transition: background 0.3s;
+                }
+                .btn-approve {
+                    background: #28a745;
+                    color: white;
+                }
+                .btn-approve:hover {
+                    background: #218838;
+                }
+                .btn-reject {
+                    background: #dc3545;
+                    color: white;
+                }
+                .btn-reject:hover {
+                    background: #c82333;
+                }
+                .no-pending {
+                    text-align: center;
+                    color: #666;
+                    font-style: italic;
+                    padding: 2rem;
+                }
+                .notification {
+                    padding: 1rem;
+                    border-radius: 5px;
+                    margin-bottom: 1rem;
+                    display: none;
+                }
+                .notification.success {
+                    background: #d4edda;
+                    color: #155724;
+                    border: 1px solid #c3e6cb;
+                }
+                .notification.error {
+                    background: #f8d7da;
+                    color: #721c24;
+                    border: 1px solid #f5c6cb;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="admin-container">
+                <div class="admin-header">
+                    <h1>Admin Panel</h1>
+                    <div class="nav-links">
+                        <a href="/">Dashboard</a>
+                        <a href="/logout">Logout</a>
+                    </div>
+                </div>
+                
+                <div class="admin-content">
+                    <div id="notification" class="notification"></div>
+                    
+                    <div class="section">
+                        <h2>Pending User Registrations</h2>
+                        <div id="pending-users" class="pending-users">
+                            <div class="no-pending">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <script>
+                function showNotification(message, type) {
+                    const notification = document.getElementById('notification');
+                    notification.textContent = message;
+                    notification.className = 'notification ' + type;
+                    notification.style.display = 'block';
+                    setTimeout(() => {
+                        notification.style.display = 'none';
+                    }, 5000);
+                }
+                
+                function approveUser(username) {
+                    fetch('/api/admin/approve-user', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({username: username})
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            showNotification(data.error, 'error');
+                        } else {
+                            showNotification(data.message, 'success');
+                            loadPendingUsers();
+                        }
+                    })
+                    .catch(error => {
+                        showNotification('Error approving user', 'error');
+                    });
+                }
+                
+                function rejectUser(username) {
+                    if (confirm('Are you sure you want to reject this user?')) {
+                        fetch('/api/admin/reject-user', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({username: username})
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                showNotification(data.error, 'error');
+                            } else {
+                                showNotification(data.message, 'success');
+                                loadPendingUsers();
+                            }
+                        })
+                        .catch(error => {
+                            showNotification('Error rejecting user', 'error');
+                        });
+                    }
+                }
+                
+                function loadPendingUsers() {
+                    fetch('/api/admin/pending-registrations')
+                    .then(response => response.json())
+                    .then(data => {
+                        const container = document.getElementById('pending-users');
+                        const pending = data.pending;
+                        
+                        if (Object.keys(pending).length === 0) {
+                            container.innerHTML = '<div class="no-pending">No pending registrations</div>';
+                        } else {
+                            let html = '';
+                            for (const [username, user] of Object.entries(pending)) {
+                                html += `
+                                    <div class="user-item">
+                                        <div class="user-info">
+                                            <h3>${username}</h3>
+                                            <p>Email: ${user.email || 'Not provided'}</p>
+                                            <p>Registered: ${new Date(user.created_at).toLocaleString()}</p>
+                                        </div>
+                                        <div class="user-actions">
+                                            <button class="btn btn-approve" onclick="approveUser('${username}')">Approve</button>
+                                            <button class="btn btn-reject" onclick="rejectUser('${username}')">Reject</button>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                            container.innerHTML = html;
+                        }
+                    })
+                    .catch(error => {
+                        document.getElementById('pending-users').innerHTML = '<div class="no-pending">Error loading pending users</div>';
+                    });
+                }
+                
+                // Load pending users on page load
+                loadPendingUsers();
+            </script>
+        </body>
+        </html>
+        '''
+
     def setup_web_routes(self):
         """Setup web server routes"""
         @self.web_server.route('/')
+        @self.require_auth
         def index():
+            # Get current user info
+            user = self.users.get(session['user_id'])
+            username = session['user_id']
+            is_admin = user.get('role') == 'admin'
+            
             return render_template_string('''
 <!DOCTYPE html>
 <html lang="en">
@@ -1141,8 +1785,21 @@ class MinecraftServerWrapper:
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎮 Minecraft Server Wrapper</h1>
-            <p>Advanced Server Management Dashboard</p>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>🎮 Minecraft Server Wrapper</h1>
+                    <p>Advanced Server Management Dashboard</p>
+                </div>
+                <div style="text-align: right;">
+                    <p style="margin: 0; font-size: 1.1em; font-weight: 500;">Welcome, {{ username }}!</p>
+                    <div style="margin-top: 10px;">
+                        {% if is_admin %}
+                        <a href="/admin" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 5px; margin-right: 10px; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">👑 Admin Panel</a>
+                        {% endif %}
+                        <a href="/logout" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 5px; transition: background 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">🚪 Logout</a>
+                    </div>
+                </div>
+            </div>
         </div>
         
         <div class="dashboard-grid">
@@ -2054,7 +2711,148 @@ class MinecraftServerWrapper:
 </html>
             ''')
         
+        # Authentication Routes
+        @self.web_server.route('/login', methods=['GET', 'POST'])
+        def login():
+            if request.method == 'POST':
+                data = request.get_json() if request.is_json else request.form
+                username = data.get('username', '').strip()
+                password = data.get('password', '')
+                
+                if not username or not password:
+                    error = 'Username and password are required'
+                    if request.is_json:
+                        return jsonify({'error': error}), 400
+                    return render_template_string(self.get_login_template(error))
+                
+                user = self.users.get(username)
+                if not user:
+                    error = 'Invalid username or password'
+                    if request.is_json:
+                        return jsonify({'error': error}), 401
+                    return render_template_string(self.get_login_template(error))
+                
+                if not user.get('approved', False):
+                    error = 'Account pending admin approval'
+                    if request.is_json:
+                        return jsonify({'error': error}), 401
+                    return render_template_string(self.get_login_template(error))
+                
+                if not self.verify_password(password, user['password_hash']):
+                    error = 'Invalid username or password'
+                    if request.is_json:
+                        return jsonify({'error': error}), 401
+                    return render_template_string(self.get_login_template(error))
+                
+                # Login successful
+                session['user_id'] = username
+                if request.is_json:
+                    return jsonify({'message': 'Login successful', 'redirect': '/'})
+                return redirect('/')
+            
+            # GET request - show login form
+            return render_template_string(self.get_login_template())
+        
+        @self.web_server.route('/register', methods=['GET', 'POST'])
+        def register():
+            if request.method == 'POST':
+                data = request.get_json() if request.is_json else request.form
+                username = data.get('username', '').strip()
+                password = data.get('password', '')
+                email = data.get('email', '').strip()
+                
+                if not username or not password:
+                    error = 'Username and password are required'
+                    if request.is_json:
+                        return jsonify({'error': error}), 400
+                    return render_template_string(self.get_register_template(error))
+                
+                if len(username) < 3:
+                    error = 'Username must be at least 3 characters long'
+                    if request.is_json:
+                        return jsonify({'error': error}), 400
+                    return render_template_string(self.get_register_template(error))
+                
+                if len(password) < 6:
+                    error = 'Password must be at least 6 characters long'
+                    if request.is_json:
+                        return jsonify({'error': error}), 400
+                    return render_template_string(self.get_register_template(error))
+                
+                if username in self.users or username in self.pending_registrations:
+                    error = 'Username already exists'
+                    if request.is_json:
+                        return jsonify({'error': error}), 400
+                    return render_template_string(self.get_register_template(error))
+                
+                # Add to pending registrations
+                self.pending_registrations[username] = {
+                    'password_hash': self.hash_password(password),
+                    'email': email,
+                    'role': 'user',
+                    'created_at': datetime.now().isoformat()
+                }
+                self.save_pending_registrations()
+                
+                success = 'Registration submitted! Please wait for admin approval.'
+                if request.is_json:
+                    return jsonify({'message': success})
+                return render_template_string(self.get_register_template(success_message=success))
+            
+            # GET request - show register form
+            return render_template_string(self.get_register_template())
+        
+        @self.web_server.route('/logout')
+        def logout():
+            session.pop('user_id', None)
+            return redirect('/login')
+        
+        @self.web_server.route('/admin')
+        @self.require_admin
+        def admin_panel():
+            return render_template_string(self.get_admin_template())
+        
+        @self.web_server.route('/api/admin/pending-registrations')
+        @self.require_admin
+        def api_pending_registrations():
+            return jsonify({'pending': self.pending_registrations})
+        
+        @self.web_server.route('/api/admin/approve-user', methods=['POST'])
+        @self.require_admin
+        def api_approve_user():
+            data = request.get_json()
+            username = data.get('username')
+            
+            if username not in self.pending_registrations:
+                return jsonify({'error': 'User not found in pending registrations'}), 404
+            
+            # Move from pending to approved users
+            user_data = self.pending_registrations.pop(username)
+            user_data['approved'] = True
+            self.users[username] = user_data
+            
+            self.save_users()
+            self.save_pending_registrations()
+            
+            return jsonify({'message': f'User {username} approved successfully'})
+        
+        @self.web_server.route('/api/admin/reject-user', methods=['POST'])
+        @self.require_admin
+        def api_reject_user():
+            data = request.get_json()
+            username = data.get('username')
+            
+            if username not in self.pending_registrations:
+                return jsonify({'error': 'User not found in pending registrations'}), 404
+            
+            # Remove from pending registrations
+            self.pending_registrations.pop(username)
+            self.save_pending_registrations()
+            
+            return jsonify({'message': f'User {username} rejected successfully'})
+        
         @self.web_server.route('/api/start', methods=['POST'])
+        @self.require_auth
         def api_start():
             """Start the Minecraft server"""
             try:
@@ -2067,6 +2865,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to start server: {str(e)}'})
         
         @self.web_server.route('/api/stop', methods=['POST'])
+        @self.require_auth
         def api_stop():
             """Stop the Minecraft server"""
             try:
@@ -2079,6 +2878,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to stop server: {str(e)}'})
         
         @self.web_server.route('/api/restart', methods=['POST'])
+        @self.require_auth
         def api_restart():
             """Restart the Minecraft server"""
             try:
@@ -2088,6 +2888,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to restart server: {str(e)}'})
         
         @self.web_server.route('/api/optimize-ram', methods=['POST'])
+        @self.require_auth
         def api_optimize_ram():
             """Optimize system RAM"""
             try:
@@ -2097,6 +2898,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to optimize RAM: {str(e)}'})
         
         @self.web_server.route('/api/command', methods=['POST'])
+        @self.require_auth
         def api_command():
             """Send command to server"""
             try:
@@ -2118,6 +2920,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to send command: {str(e)}'})
         
         @self.web_server.route('/api/check-updates', methods=['POST'])
+        @self.require_auth
         def api_check_updates():
             """Check for application updates"""
             try:
@@ -2139,6 +2942,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to check for updates: {str(e)}'})
         
         @self.web_server.route('/api/apply-update', methods=['POST'])
+        @self.require_auth
         def api_apply_update():
             """Apply the available update"""
             try:
@@ -2153,6 +2957,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to apply update: {str(e)}'})
         
         @self.web_server.route('/api/version', methods=['GET'])
+        @self.require_auth
         def api_version():
             """Get current version information"""
             try:
@@ -2165,6 +2970,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to get version info: {str(e)}'})
         
         @self.web_server.route('/api/console', methods=['GET'])
+        @self.require_auth
         def api_console():
             """Get console history"""
             try:
@@ -2176,6 +2982,7 @@ class MinecraftServerWrapper:
         
         # File Manager API endpoints
         @self.web_server.route('/api/files', methods=['GET'])
+        @self.require_auth
         def api_files():
             """Get list of files in the managed directory"""
             try:
@@ -2205,6 +3012,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to list files: {str(e)}'})
         
         @self.web_server.route('/api/files/upload', methods=['POST'])
+        @self.require_auth
         def api_files_upload():
             """Upload files to the managed directory"""
             try:
@@ -2248,6 +3056,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to upload files: {str(e)}'})
         
         @self.web_server.route('/api/files/rename', methods=['POST'])
+        @self.require_auth
         def api_files_rename():
             """Rename a file in the managed directory"""
             try:
@@ -2279,6 +3088,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to rename file: {str(e)}'})
         
         @self.web_server.route('/api/files/delete', methods=['POST'])
+        @self.require_auth
         def api_files_delete():
             """Delete a file from the managed directory"""
             try:
@@ -2312,6 +3122,7 @@ class MinecraftServerWrapper:
                 return jsonify({'error': f'Failed to delete file: {str(e)}'})
         
         @self.web_server.route('/api/files/download/<filename>')
+        @self.require_auth
         def api_files_download(filename):
             """Download a file from the managed directory"""
             try:
