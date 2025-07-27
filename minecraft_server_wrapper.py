@@ -31,7 +31,7 @@ class MinecraftServerWrapper:
     def __init__(self):
         # Application version and update settings
         self.current_version = "2.1.0"  # Current app version
-        self.github_repo = "MersYeon/minecraft-server-wrapper"  # Your GitHub repo
+        self.github_repo = "jcfrancisco0103/My-Server-Wrapper"  # Your GitHub repo
         self.github_api_url = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
         self.update_check_interval = 3600  # Check for updates every hour (in seconds)
         self.last_update_check = 0
