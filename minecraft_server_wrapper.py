@@ -32,8 +32,8 @@ from functools import wraps
 class MinecraftServerWrapper:
     def __init__(self):
         # Application version and update settings
-        self.current_version = "1.0.3"  # Current app version - Added Authentication System
-        self.github_repo = "jcfrancisco0103/My-Server-Wrapper"  # Your GitHub repo
+        self.current_version = "1.0.3"
+        self.github_repo = "jcfrancisco0103/My-Server-Wrapper" 
         self.github_api_url = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
         self.update_check_interval = 3600  # Check for updates every hour (in seconds)
         self.last_update_check = 0
@@ -98,6 +98,7 @@ class MinecraftServerWrapper:
         # Setup UI
         self.setup_ui()
         self.setup_web_routes()
+        self.setup_socketio_events()
         
         # Start performance monitoring
         self.start_performance_monitoring()
@@ -2641,6 +2642,16 @@ class MinecraftServerWrapper:
             color: white;
         }
         
+        .btn-view {
+            background: #9b59b6;
+            color: white;
+        }
+        
+        .btn-edit {
+            background: #16a085;
+            color: white;
+        }
+        
         .upload-progress {
             margin-top: 15px;
             padding: 15px;
@@ -2709,6 +2720,123 @@ class MinecraftServerWrapper:
         }
         
         .file-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+        
+        .modal-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 2% auto;
+            padding: 0;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 1000px;
+            height: 90%;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        .modal-header {
+            padding: 20px 25px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px 15px 0 0;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: white;
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2em;
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: rotate(90deg);
+        }
+        
+        .modal-body {
+            flex: 1;
+            padding: 20px 25px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .file-editor-controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        #fileContent {
+            flex: 1;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            padding: 15px;
+            resize: none;
+            outline: none;
+        }
+        
+        #fileContent:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+        }
+        
+        #fileContent::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #fileContent::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        
+        #fileContent::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 4px;
+        }
+        
+        #fileContent::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.5);
         }
         
@@ -2818,6 +2946,23 @@ class MinecraftServerWrapper:
     
     <div class="notification" id="notification"></div>
     
+    <!-- File Viewer/Editor Modal -->
+    <div class="modal" id="fileModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">View File</h3>
+                <button class="modal-close" onclick="closeFileModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="file-editor-controls" id="editorControls" style="display: none;">
+                    <button class="btn btn-success" onclick="saveFile()">💾 Save</button>
+                    <button class="btn btn-primary" onclick="toggleViewMode()">👁️ View Mode</button>
+                </div>
+                <textarea id="fileContent" readonly></textarea>
+            </div>
+        </div>
+    </div>
+    
     <script>
         // File input change handler
         document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -2893,23 +3038,28 @@ class MinecraftServerWrapper:
                 return;
             }
             
-            fileList.innerHTML = files.map(file => `
-                <div class="file-item">
-                    <div class="file-icon">${getFileIcon(file)}</div>
-                    <div class="file-info">
-                        <div class="file-name">${file.name}</div>
-                        <div class="file-details">
-                            ${file.is_directory ? 'Directory' : formatFileSize(file.size)} • 
-                            ${new Date(file.modified * 1000).toLocaleString()}
+            fileList.innerHTML = files.map(file => {
+                const isTextFile = isTextBasedFile(file.name);
+                return `
+                    <div class="file-item">
+                        <div class="file-icon">${getFileIcon(file)}</div>
+                        <div class="file-info">
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-details">
+                                ${file.is_directory ? 'Directory' : formatFileSize(file.size)} • 
+                                ${new Date(file.modified * 1000).toLocaleString()}
+                            </div>
+                        </div>
+                        <div class="file-actions">
+                            ${!file.is_directory && isTextFile ? `<button class="action-btn btn-view" onclick="viewFile('${file.name}')">👁️ View</button>` : ''}
+                            ${!file.is_directory && isTextFile ? `<button class="action-btn btn-edit" onclick="editFile('${file.name}')">✏️ Edit</button>` : ''}
+                            ${!file.is_directory ? `<button class="action-btn btn-download" onclick="downloadFile('${file.name}')">📥 Download</button>` : ''}
+                            <button class="action-btn btn-rename" onclick="renameFile('${file.name}')">🔄 Rename</button>
+                            <button class="action-btn btn-delete" onclick="deleteFile('${file.name}')">🗑️ Delete</button>
                         </div>
                     </div>
-                    <div class="file-actions">
-                        ${!file.is_directory ? `<button class="action-btn btn-download" onclick="downloadFile('${file.name}')">📥 Download</button>` : ''}
-                        <button class="action-btn btn-rename" onclick="renameFile('${file.name}')">✏️ Rename</button>
-                        <button class="action-btn btn-delete" onclick="deleteFile('${file.name}')">🗑️ Delete</button>
-                    </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         }
         
         function getFileIcon(file) {
@@ -3048,6 +3198,137 @@ class MinecraftServerWrapper:
                 });
             }
         }
+        
+        function isTextBasedFile(filename) {
+            const textExtensions = ['.txt', '.json', '.properties', '.yml', '.yaml', '.xml', '.cfg', '.conf', 
+                                  '.ini', '.log', '.md', '.py', '.java', '.js', '.html', '.css', '.sql', 
+                                  '.sh', '.bat', '.cmd', '.ps1', '.toml', '.env', '.gitignore', '.dockerfile'];
+            const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+            return textExtensions.includes(ext);
+        }
+        
+        let currentFile = null;
+        let isEditMode = false;
+        
+        function viewFile(filename) {
+            currentFile = filename;
+            isEditMode = false;
+            
+            fetch(`/api/files/view/${encodeURIComponent(filename)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(data.error, 'error');
+                        return;
+                    }
+                    
+                    document.getElementById('modalTitle').textContent = `View: ${filename}`;
+                    document.getElementById('fileContent').value = data.content;
+                    document.getElementById('fileContent').readOnly = true;
+                    document.getElementById('editorControls').style.display = 'none';
+                    document.getElementById('fileModal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error viewing file:', error);
+                    showNotification('Failed to view file', 'error');
+                });
+        }
+        
+        function editFile(filename) {
+            currentFile = filename;
+            isEditMode = true;
+            
+            fetch(`/api/files/view/${encodeURIComponent(filename)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        showNotification(data.error, 'error');
+                        return;
+                    }
+                    
+                    if (!data.is_editable) {
+                        showNotification('File is too large to edit or not a text file', 'error');
+                        return;
+                    }
+                    
+                    document.getElementById('modalTitle').textContent = `Edit: ${filename}`;
+                    document.getElementById('fileContent').value = data.content;
+                    document.getElementById('fileContent').readOnly = false;
+                    document.getElementById('editorControls').style.display = 'flex';
+                    document.getElementById('fileModal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error editing file:', error);
+                    showNotification('Failed to edit file', 'error');
+                });
+        }
+        
+        function saveFile() {
+            if (!currentFile || !isEditMode) return;
+            
+            const content = document.getElementById('fileContent').value;
+            
+            fetch('/api/files/edit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    filename: currentFile,
+                    content: content
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    showNotification(data.error, 'error');
+                } else {
+                    showNotification(data.message, 'success');
+                    refreshFileList();
+                }
+            })
+            .catch(error => {
+                console.error('Error saving file:', error);
+                showNotification('Failed to save file', 'error');
+            });
+        }
+        
+        function toggleViewMode() {
+            if (isEditMode) {
+                // Switch to view mode
+                document.getElementById('fileContent').readOnly = true;
+                document.getElementById('editorControls').style.display = 'none';
+                document.getElementById('modalTitle').textContent = `View: ${currentFile}`;
+                isEditMode = false;
+            } else {
+                // Switch to edit mode
+                document.getElementById('fileContent').readOnly = false;
+                document.getElementById('editorControls').style.display = 'flex';
+                document.getElementById('modalTitle').textContent = `Edit: ${currentFile}`;
+                isEditMode = true;
+            }
+        }
+        
+        function closeFileModal() {
+            document.getElementById('fileModal').style.display = 'none';
+            currentFile = null;
+            isEditMode = false;
+        }
+        
+        // Close modal when clicking outside of it
+        window.onclick = function(event) {
+            const modal = document.getElementById('fileModal');
+            if (event.target === modal) {
+                closeFileModal();
+            }
+        }
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeFileModal();
+            }
+        });
         
         // Load file list on page load
         setTimeout(() => {
@@ -3333,7 +3614,7 @@ class MinecraftServerWrapper:
         def api_files():
             """Get list of files in the managed directory"""
             try:
-                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                file_manager_path = self.server_directory
                 
                 if not os.path.exists(file_manager_path):
                     os.makedirs(file_manager_path, exist_ok=True)
@@ -3363,7 +3644,7 @@ class MinecraftServerWrapper:
         def api_files_upload():
             """Upload files to the managed directory"""
             try:
-                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                file_manager_path = self.server_directory
                 
                 if not os.path.exists(file_manager_path):
                     os.makedirs(file_manager_path, exist_ok=True)
@@ -3376,12 +3657,16 @@ class MinecraftServerWrapper:
                     if file.filename == '':
                         continue
                     
-                    # Secure filename
-                    filename = file.filename
-                    # Remove any path components for security
-                    filename = os.path.basename(filename)
+                    # Secure filename using our sanitization function
+                    filename = self.sanitize_filename(file.filename)
+                    if not filename:
+                        continue
                     
                     file_path = os.path.join(file_manager_path, filename)
+                    
+                    # Additional security check
+                    if not self.is_safe_path(file_path, file_manager_path):
+                        continue
                     
                     # Handle duplicate filenames
                     counter = 1
@@ -3389,10 +3674,14 @@ class MinecraftServerWrapper:
                     while os.path.exists(file_path):
                         filename = f"{original_name}_{counter}{ext}"
                         file_path = os.path.join(file_manager_path, filename)
+                        if not self.is_safe_path(file_path, file_manager_path):
+                            break
                         counter += 1
                     
-                    file.save(file_path)
-                    uploaded_files.append(filename)
+                    # Final security check before saving
+                    if self.is_safe_path(file_path, file_manager_path):
+                        file.save(file_path)
+                        uploaded_files.append(filename)
                 
                 if uploaded_files:
                     return jsonify({'message': f'Successfully uploaded {len(uploaded_files)} file(s)', 'files': uploaded_files})
@@ -3414,19 +3703,26 @@ class MinecraftServerWrapper:
                 if not old_name or not new_name:
                     return jsonify({'error': 'Both old_name and new_name are required'})
                 
-                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                # Sanitize filenames
+                old_name = self.sanitize_filename(old_name)
+                new_name = self.sanitize_filename(new_name)
+                
+                if not old_name or not new_name:
+                    return jsonify({'error': 'Invalid filename provided'})
+                
+                file_manager_path = self.server_directory
                 old_path = os.path.join(file_manager_path, old_name)
                 new_path = os.path.join(file_manager_path, new_name)
+                
+                # Enhanced security checks
+                if not self.is_safe_path(old_path, file_manager_path) or not self.is_safe_path(new_path, file_manager_path):
+                    return jsonify({'error': 'Invalid file path'})
                 
                 if not os.path.exists(old_path):
                     return jsonify({'error': 'File not found'})
                 
                 if os.path.exists(new_path):
                     return jsonify({'error': 'A file with that name already exists'})
-                
-                # Security check: ensure paths are within the managed directory
-                if not old_path.startswith(file_manager_path) or not new_path.startswith(file_manager_path):
-                    return jsonify({'error': 'Invalid file path'})
                 
                 os.rename(old_path, new_path)
                 return jsonify({'message': f'Successfully renamed "{old_name}" to "{new_name}"'})
@@ -3445,15 +3741,20 @@ class MinecraftServerWrapper:
                 if not filename:
                     return jsonify({'error': 'Filename is required'})
                 
-                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                # Sanitize filename
+                filename = self.sanitize_filename(filename)
+                if not filename:
+                    return jsonify({'error': 'Invalid filename provided'})
+                
+                file_manager_path = self.server_directory
                 file_path = os.path.join(file_manager_path, filename)
+                
+                # Enhanced security check
+                if not self.is_safe_path(file_path, file_manager_path):
+                    return jsonify({'error': 'Invalid file path'})
                 
                 if not os.path.exists(file_path):
                     return jsonify({'error': 'File not found'})
-                
-                # Security check: ensure path is within the managed directory
-                if not file_path.startswith(file_manager_path):
-                    return jsonify({'error': 'Invalid file path'})
                 
                 if os.path.isdir(file_path):
                     # Remove directory and all contents
@@ -3473,15 +3774,20 @@ class MinecraftServerWrapper:
         def api_files_download(filename):
             """Download a file from the managed directory"""
             try:
-                file_manager_path = r"C:\Users\MersYeon\Desktop\Cacasians"
+                # Sanitize filename
+                filename = self.sanitize_filename(filename)
+                if not filename:
+                    return jsonify({'error': 'Invalid filename provided'}), 400
+                
+                file_manager_path = self.server_directory
                 file_path = os.path.join(file_manager_path, filename)
+                
+                # Enhanced security check
+                if not self.is_safe_path(file_path, file_manager_path):
+                    return jsonify({'error': 'Invalid file path'}), 403
                 
                 if not os.path.exists(file_path):
                     return jsonify({'error': 'File not found'}), 404
-                
-                # Security check: ensure path is within the managed directory
-                if not file_path.startswith(file_manager_path):
-                    return jsonify({'error': 'Invalid file path'}), 403
                 
                 if os.path.isdir(file_path):
                     return jsonify({'error': 'Cannot download directories'}), 400
@@ -3491,6 +3797,165 @@ class MinecraftServerWrapper:
             except Exception as e:
                 return jsonify({'error': f'Failed to download file: {str(e)}'}), 500
         
+        @self.web_server.route('/api/files/view/<filename>')
+        @self.require_auth
+        def api_files_view(filename):
+            """View file contents"""
+            try:
+                # Sanitize filename
+                filename = self.sanitize_filename(filename)
+                if not filename:
+                    return jsonify({'error': 'Invalid filename provided'}), 400
+                
+                file_manager_path = self.server_directory
+                file_path = os.path.join(file_manager_path, filename)
+                
+                # Enhanced security check
+                if not self.is_safe_path(file_path, file_manager_path):
+                    return jsonify({'error': 'Invalid file path'}), 403
+                
+                if not os.path.exists(file_path):
+                    return jsonify({'error': 'File not found'}), 404
+                
+                if os.path.isdir(file_path):
+                    return jsonify({'error': 'Cannot view directories'}), 400
+                
+                # Check if file is text-based
+                text_extensions = {'.txt', '.json', '.properties', '.yml', '.yaml', '.xml', '.cfg', '.conf', 
+                                 '.ini', '.log', '.md', '.py', '.java', '.js', '.html', '.css', '.sql', 
+                                 '.sh', '.bat', '.cmd', '.ps1', '.toml', '.env', '.gitignore', '.dockerfile'}
+                
+                file_ext = os.path.splitext(filename)[1].lower()
+                
+                # Try to read as text
+                try:
+                    # First try UTF-8
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    encoding = 'utf-8'
+                except UnicodeDecodeError:
+                    try:
+                        # Try with latin-1 as fallback
+                        with open(file_path, 'r', encoding='latin-1') as f:
+                            content = f.read()
+                        encoding = 'latin-1'
+                    except Exception:
+                        return jsonify({'error': 'File is not readable as text'}), 400
+                
+                # Check file size (limit to 1MB for viewing)
+                file_size = os.path.getsize(file_path)
+                if file_size > 1024 * 1024:  # 1MB
+                    return jsonify({'error': 'File too large to view (max 1MB)'}), 400
+                
+                return jsonify({
+                    'filename': filename,
+                    'content': content,
+                    'encoding': encoding,
+                    'size': file_size,
+                    'extension': file_ext,
+                    'is_editable': file_ext in text_extensions or len(content) < 100000  # 100KB limit for editing
+                })
+                
+            except Exception as e:
+                return jsonify({'error': f'Failed to view file: {str(e)}'}), 500
+        
+        @self.web_server.route('/api/files/edit', methods=['POST'])
+        @self.require_auth
+        def api_files_edit():
+            """Edit file contents"""
+            try:
+                data = request.get_json()
+                filename = data.get('filename')
+                content = data.get('content')
+                
+                if not filename:
+                    return jsonify({'error': 'Filename is required'})
+                
+                if content is None:
+                    return jsonify({'error': 'Content is required'})
+                
+                # Sanitize filename
+                filename = self.sanitize_filename(filename)
+                if not filename:
+                    return jsonify({'error': 'Invalid filename provided'})
+                
+                file_manager_path = self.server_directory
+                file_path = os.path.join(file_manager_path, filename)
+                
+                # Enhanced security check
+                if not self.is_safe_path(file_path, file_manager_path):
+                    return jsonify({'error': 'Invalid file path'})
+                
+                if not os.path.exists(file_path):
+                    return jsonify({'error': 'File not found'})
+                
+                if os.path.isdir(file_path):
+                    return jsonify({'error': 'Cannot edit directories'})
+                
+                # Create backup before editing
+                backup_path = file_path + '.backup'
+                try:
+                    import shutil
+                    shutil.copy2(file_path, backup_path)
+                except Exception:
+                    pass  # Backup failed, but continue
+                
+                # Write new content
+                try:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(content)
+                    
+                    return jsonify({'message': f'Successfully saved "{filename}"'})
+                    
+                except Exception as e:
+                    # Try to restore backup if write failed
+                    try:
+                        if os.path.exists(backup_path):
+                            shutil.copy2(backup_path, file_path)
+                    except Exception:
+                        pass
+                    
+                    return jsonify({'error': f'Failed to save file: {str(e)}'})
+                
+            except Exception as e:
+                return jsonify({'error': f'Failed to edit file: {str(e)}'})
+        
+    # Helper function for secure file path validation
+    def is_safe_path(self, path, base_path):
+        """Validate that a file path is safe and within the base directory"""
+        try:
+            # Resolve both paths to absolute paths
+            abs_path = os.path.abspath(path)
+            abs_base = os.path.abspath(base_path)
+            
+            # Check if the resolved path is within the base directory
+            return abs_path.startswith(abs_base + os.sep) or abs_path == abs_base
+        except Exception:
+            return False
+    
+    def sanitize_filename(self, filename):
+        """Sanitize filename to prevent directory traversal and invalid characters"""
+        if not filename:
+            return None
+        
+        # Remove path separators and dangerous characters
+        filename = os.path.basename(filename)
+        filename = filename.replace('..', '')
+        filename = filename.replace('/', '')
+        filename = filename.replace('\\', '')
+        
+        # Remove control characters and other dangerous chars
+        import re
+        filename = re.sub(r'[<>:"|?*\x00-\x1f]', '', filename)
+        
+        # Ensure filename is not empty after sanitization
+        if not filename.strip():
+            return None
+            
+        return filename.strip()
+
+    def setup_socketio_events(self):
+        """Setup Socket.IO event handlers"""
         # Auto-check for updates periodically
         def auto_update_check():
             while True:
