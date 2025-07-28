@@ -2573,6 +2573,40 @@ class MinecraftServerWrapper:
             overflow-y: auto;
         }
         
+        .breadcrumb-nav {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .breadcrumb-item {
+            background: rgba(52, 152, 219, 0.8);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 2px;
+        }
+        
+        .breadcrumb-item:hover {
+            background: rgba(52, 152, 219, 1);
+            transform: translateY(-1px);
+        }
+        
+        .breadcrumb-separator {
+            margin: 0 8px;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: bold;
+        }
+        
         .file-item {
             display: flex;
             align-items: center;
@@ -3014,15 +3048,21 @@ class MinecraftServerWrapper:
             }, 3000);
         }
         
-        function refreshFileList() {
-            fetch('/api/files')
+        // Current path tracking
+        let currentPath = '';
+        
+        function refreshFileList(path = currentPath) {
+            currentPath = path;
+            const url = path ? `/api/files?path=${encodeURIComponent(path)}` : '/api/files';
+            
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
                         showNotification(data.error, 'error');
                         return;
                     }
-                    displayFiles(data.files);
+                    displayFiles(data.files, data.breadcrumbs || [], data.relative_path || '');
                 })
                 .catch(error => {
                     console.error('Error fetching files:', error);
@@ -3030,20 +3070,35 @@ class MinecraftServerWrapper:
                 });
         }
         
-        function displayFiles(files) {
+        function displayFiles(files, breadcrumbs, relativePath) {
             const fileList = document.getElementById('fileList');
             
+            // Create breadcrumb navigation
+            let breadcrumbHtml = `
+                <div class="breadcrumb-nav">
+                    <button class="breadcrumb-item" onclick="navigateToPath('')">🏠 Home</button>
+            `;
+            
+            breadcrumbs.forEach(crumb => {
+                breadcrumbHtml += `
+                    <span class="breadcrumb-separator">></span>
+                    <button class="breadcrumb-item" onclick="navigateToPath('${crumb.path}')">${crumb.name}</button>
+                `;
+            });
+            
+            breadcrumbHtml += '</div>';
+            
             if (files.length === 0) {
-                fileList.innerHTML = '<div style="text-align: center; opacity: 0.7; padding: 20px;">No files found</div>';
+                fileList.innerHTML = breadcrumbHtml + '<div style="text-align: center; opacity: 0.7; padding: 20px;">No files found</div>';
                 return;
             }
             
-            fileList.innerHTML = files.map(file => {
+            const filesHtml = files.map(file => {
                 const isTextFile = isTextBasedFile(file.name);
                 return `
                     <div class="file-item">
-                        <div class="file-icon">${getFileIcon(file)}</div>
-                        <div class="file-info">
+                        <div class="file-icon" ${file.is_directory ? `onclick="navigateToFolder('${file.name}')" style="cursor: pointer;"` : ''}>${getFileIcon(file)}</div>
+                        <div class="file-info" ${file.is_directory ? `onclick="navigateToFolder('${file.name}')" style="cursor: pointer;"` : ''}>
                             <div class="file-name">${file.name}</div>
                             <div class="file-details">
                                 ${file.is_directory ? 'Directory' : formatFileSize(file.size)} • 
@@ -3051,6 +3106,7 @@ class MinecraftServerWrapper:
                             </div>
                         </div>
                         <div class="file-actions">
+                            ${file.is_directory ? `<button class="action-btn btn-view" onclick="navigateToFolder('${file.name}')">📁 Open</button>` : ''}
                             ${!file.is_directory && isTextFile ? `<button class="action-btn btn-view" onclick="viewFile('${file.name}')">👁️ View</button>` : ''}
                             ${!file.is_directory && isTextFile ? `<button class="action-btn btn-edit" onclick="editFile('${file.name}')">✏️ Edit</button>` : ''}
                             ${!file.is_directory ? `<button class="action-btn btn-download" onclick="downloadFile('${file.name}')">📥 Download</button>` : ''}
@@ -3060,6 +3116,17 @@ class MinecraftServerWrapper:
                     </div>
                 `;
             }).join('');
+            
+            fileList.innerHTML = breadcrumbHtml + filesHtml;
+        }
+        
+        function navigateToPath(path) {
+            refreshFileList(path);
+        }
+        
+        function navigateToFolder(folderName) {
+            const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+            refreshFileList(newPath);
         }
         
         function getFileIcon(file) {
@@ -3092,6 +3159,11 @@ class MinecraftServerWrapper:
             const formData = new FormData();
             for (let file of files) {
                 formData.append('files', file);
+            }
+            
+            // Add current path to form data
+            if (currentPath) {
+                formData.append('current_path', currentPath);
             }
             
             const progressContainer = document.getElementById('uploadProgress');
@@ -3140,7 +3212,8 @@ class MinecraftServerWrapper:
         }
         
         function downloadFile(filename) {
-            window.open(`/api/files/download/${encodeURIComponent(filename)}`, '_blank');
+            const path = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
+            window.open(`/api/files/download/${encodeURIComponent(filename)}${path}`, '_blank');
         }
         
         function renameFile(filename) {
@@ -3153,7 +3226,8 @@ class MinecraftServerWrapper:
                     },
                     body: JSON.stringify({
                         old_name: filename,
-                        new_name: newName
+                        new_name: newName,
+                        path: currentPath
                     })
                 })
                 .then(response => response.json())
@@ -3180,7 +3254,8 @@ class MinecraftServerWrapper:
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        filename: filename
+                        filename: filename,
+                        current_path: currentPath
                     })
                 })
                 .then(response => response.json())
@@ -3214,7 +3289,8 @@ class MinecraftServerWrapper:
             currentFile = filename;
             isEditMode = false;
             
-            fetch(`/api/files/view/${encodeURIComponent(filename)}`)
+            const path = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
+            fetch(`/api/files/view/${encodeURIComponent(filename)}${path}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -3238,7 +3314,8 @@ class MinecraftServerWrapper:
             currentFile = filename;
             isEditMode = true;
             
-            fetch(`/api/files/view/${encodeURIComponent(filename)}`)
+            const path = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
+            fetch(`/api/files/view/${encodeURIComponent(filename)}${path}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.error) {
@@ -3614,28 +3691,77 @@ class MinecraftServerWrapper:
         def api_files():
             """Get list of files in the managed directory"""
             try:
-                file_manager_path = self.server_directory
+                # Get the requested path from query parameters
+                requested_path = request.args.get('path', '')
+                
+                # Start with the server directory as the base
+                base_path = self.server_directory
+                
+                # If a path is requested, join it with the base path
+                if requested_path:
+                    # Normalize and validate the requested path
+                    requested_path = requested_path.replace('\\', '/').strip('/')
+                    if requested_path and not requested_path.startswith('..'):
+                        file_manager_path = os.path.join(base_path, requested_path)
+                        file_manager_path = os.path.normpath(file_manager_path)
+                    else:
+                        file_manager_path = base_path
+                else:
+                    file_manager_path = base_path
+                
+                # Security check: ensure the path is within the server directory
+                if not self.is_safe_path(file_manager_path, base_path):
+                    return jsonify({'error': 'Invalid path'}), 403
                 
                 if not os.path.exists(file_manager_path):
-                    os.makedirs(file_manager_path, exist_ok=True)
+                    return jsonify({'error': 'Path does not exist'}), 404
+                
+                if not os.path.isdir(file_manager_path):
+                    return jsonify({'error': 'Path is not a directory'}), 400
                 
                 files = []
                 for item in os.listdir(file_manager_path):
                     item_path = os.path.join(file_manager_path, item)
-                    stat = os.stat(item_path)
-                    
-                    files.append({
-                        'name': item,
-                        'size': stat.st_size,
-                        'modified': stat.st_mtime,
-                        'is_directory': os.path.isdir(item_path),
-                        'extension': os.path.splitext(item)[1].lower() if not os.path.isdir(item_path) else ''
-                    })
+                    try:
+                        stat = os.stat(item_path)
+                        
+                        files.append({
+                            'name': item,
+                            'size': stat.st_size,
+                            'modified': stat.st_mtime,
+                            'is_directory': os.path.isdir(item_path),
+                            'extension': os.path.splitext(item)[1].lower() if not os.path.isdir(item_path) else ''
+                        })
+                    except (OSError, PermissionError):
+                        # Skip files we can't access
+                        continue
                 
                 # Sort files: directories first, then by name
                 files.sort(key=lambda x: (not x['is_directory'], x['name'].lower()))
                 
-                return jsonify({'files': files, 'path': file_manager_path})
+                # Calculate relative path for display
+                relative_path = os.path.relpath(file_manager_path, base_path)
+                if relative_path == '.':
+                    relative_path = ''
+                
+                # Generate breadcrumb path components
+                breadcrumbs = []
+                if relative_path:
+                    path_parts = relative_path.split(os.sep)
+                    current_path = ''
+                    for part in path_parts:
+                        current_path = os.path.join(current_path, part) if current_path else part
+                        breadcrumbs.append({
+                            'name': part,
+                            'path': current_path.replace('\\', '/')
+                        })
+                
+                return jsonify({
+                    'files': files, 
+                    'path': file_manager_path,
+                    'relative_path': relative_path.replace('\\', '/') if relative_path else '',
+                    'breadcrumbs': breadcrumbs
+                })
             except Exception as e:
                 return jsonify({'error': f'Failed to list files: {str(e)}'})
         
@@ -3644,7 +3770,27 @@ class MinecraftServerWrapper:
         def api_files_upload():
             """Upload files to the managed directory"""
             try:
-                file_manager_path = self.server_directory
+                # Get the current path from form data
+                current_path = request.form.get('path', '')
+                
+                # Start with the server directory as the base
+                base_path = self.server_directory
+                
+                # If a path is provided, join it with the base path
+                if current_path:
+                    # Normalize and validate the requested path
+                    current_path = current_path.replace('\\', '/').strip('/')
+                    if current_path and not current_path.startswith('..'):
+                        file_manager_path = os.path.join(base_path, current_path)
+                        file_manager_path = os.path.normpath(file_manager_path)
+                    else:
+                        file_manager_path = base_path
+                else:
+                    file_manager_path = base_path
+                
+                # Security check: ensure the path is within the server directory
+                if not self.is_safe_path(file_manager_path, base_path):
+                    return jsonify({'error': 'Invalid path'}), 403
                 
                 if not os.path.exists(file_manager_path):
                     os.makedirs(file_manager_path, exist_ok=True)
@@ -3665,7 +3811,7 @@ class MinecraftServerWrapper:
                     file_path = os.path.join(file_manager_path, filename)
                     
                     # Additional security check
-                    if not self.is_safe_path(file_path, file_manager_path):
+                    if not self.is_safe_path(file_path, base_path):
                         continue
                     
                     # Handle duplicate filenames
@@ -3674,12 +3820,12 @@ class MinecraftServerWrapper:
                     while os.path.exists(file_path):
                         filename = f"{original_name}_{counter}{ext}"
                         file_path = os.path.join(file_manager_path, filename)
-                        if not self.is_safe_path(file_path, file_manager_path):
+                        if not self.is_safe_path(file_path, base_path):
                             break
                         counter += 1
                     
                     # Final security check before saving
-                    if self.is_safe_path(file_path, file_manager_path):
+                    if self.is_safe_path(file_path, base_path):
                         file.save(file_path)
                         uploaded_files.append(filename)
                 
@@ -3699,6 +3845,7 @@ class MinecraftServerWrapper:
                 data = request.get_json()
                 old_name = data.get('old_name')
                 new_name = data.get('new_name')
+                current_path = data.get('path', '')
                 
                 if not old_name or not new_name:
                     return jsonify({'error': 'Both old_name and new_name are required'})
@@ -3710,12 +3857,26 @@ class MinecraftServerWrapper:
                 if not old_name or not new_name:
                     return jsonify({'error': 'Invalid filename provided'})
                 
-                file_manager_path = self.server_directory
+                # Start with the server directory as the base
+                base_path = self.server_directory
+                
+                # If a path is provided, join it with the base path
+                if current_path:
+                    # Normalize and validate the requested path
+                    current_path = current_path.replace('\\', '/').strip('/')
+                    if current_path and not current_path.startswith('..'):
+                        file_manager_path = os.path.join(base_path, current_path)
+                        file_manager_path = os.path.normpath(file_manager_path)
+                    else:
+                        file_manager_path = base_path
+                else:
+                    file_manager_path = base_path
+                
                 old_path = os.path.join(file_manager_path, old_name)
                 new_path = os.path.join(file_manager_path, new_name)
                 
                 # Enhanced security checks
-                if not self.is_safe_path(old_path, file_manager_path) or not self.is_safe_path(new_path, file_manager_path):
+                if not self.is_safe_path(old_path, base_path) or not self.is_safe_path(new_path, base_path):
                     return jsonify({'error': 'Invalid file path'})
                 
                 if not os.path.exists(old_path):
@@ -3737,6 +3898,7 @@ class MinecraftServerWrapper:
             try:
                 data = request.get_json()
                 filename = data.get('filename')
+                current_path = data.get('path', '')
                 
                 if not filename:
                     return jsonify({'error': 'Filename is required'})
@@ -3746,11 +3908,25 @@ class MinecraftServerWrapper:
                 if not filename:
                     return jsonify({'error': 'Invalid filename provided'})
                 
-                file_manager_path = self.server_directory
+                # Start with the server directory as the base
+                base_path = self.server_directory
+                
+                # If a path is provided, join it with the base path
+                if current_path:
+                    # Normalize and validate the requested path
+                    current_path = current_path.replace('\\', '/').strip('/')
+                    if current_path and not current_path.startswith('..'):
+                        file_manager_path = os.path.join(base_path, current_path)
+                        file_manager_path = os.path.normpath(file_manager_path)
+                    else:
+                        file_manager_path = base_path
+                else:
+                    file_manager_path = base_path
+                
                 file_path = os.path.join(file_manager_path, filename)
                 
                 # Enhanced security check
-                if not self.is_safe_path(file_path, file_manager_path):
+                if not self.is_safe_path(file_path, base_path):
                     return jsonify({'error': 'Invalid file path'})
                 
                 if not os.path.exists(file_path):
@@ -3779,11 +3955,28 @@ class MinecraftServerWrapper:
                 if not filename:
                     return jsonify({'error': 'Invalid filename provided'}), 400
                 
-                file_manager_path = self.server_directory
+                # Get the current path from query parameters
+                current_path = request.args.get('path', '')
+                
+                # Start with the server directory as the base
+                base_path = self.server_directory
+                
+                # If a path is provided, join it with the base path
+                if current_path:
+                    # Normalize and validate the requested path
+                    current_path = current_path.replace('\\', '/').strip('/')
+                    if current_path and not current_path.startswith('..'):
+                        file_manager_path = os.path.join(base_path, current_path)
+                        file_manager_path = os.path.normpath(file_manager_path)
+                    else:
+                        file_manager_path = base_path
+                else:
+                    file_manager_path = base_path
+                
                 file_path = os.path.join(file_manager_path, filename)
                 
                 # Enhanced security check
-                if not self.is_safe_path(file_path, file_manager_path):
+                if not self.is_safe_path(file_path, base_path):
                     return jsonify({'error': 'Invalid file path'}), 403
                 
                 if not os.path.exists(file_path):
@@ -3807,11 +4000,28 @@ class MinecraftServerWrapper:
                 if not filename:
                     return jsonify({'error': 'Invalid filename provided'}), 400
                 
-                file_manager_path = self.server_directory
+                # Get the current path from query parameters
+                current_path = request.args.get('path', '')
+                
+                # Start with the server directory as the base
+                base_path = self.server_directory
+                
+                # If a path is provided, join it with the base path
+                if current_path:
+                    # Normalize and validate the requested path
+                    current_path = current_path.replace('\\', '/').strip('/')
+                    if current_path and not current_path.startswith('..'):
+                        file_manager_path = os.path.join(base_path, current_path)
+                        file_manager_path = os.path.normpath(file_manager_path)
+                    else:
+                        file_manager_path = base_path
+                else:
+                    file_manager_path = base_path
+                
                 file_path = os.path.join(file_manager_path, filename)
                 
                 # Enhanced security check
-                if not self.is_safe_path(file_path, file_manager_path):
+                if not self.is_safe_path(file_path, base_path):
                     return jsonify({'error': 'Invalid file path'}), 403
                 
                 if not os.path.exists(file_path):
