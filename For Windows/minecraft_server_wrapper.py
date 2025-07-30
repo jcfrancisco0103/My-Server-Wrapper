@@ -32,7 +32,7 @@ from functools import wraps
 class MinecraftServerWrapper:
     def __init__(self):
         # Application version and update settings
-        self.current_version = "1.0.4"
+        self.current_version = "1.0.5"
         self.github_repo = "jcfrancisco0103/My-Server-Wrapper" 
         self.github_api_url = f"https://api.github.com/repos/{self.github_repo}/releases/latest"
         self.update_check_interval = 3600  # Check for updates every hour (in seconds)
@@ -482,47 +482,478 @@ class MinecraftServerWrapper:
         return 0
 
     def setup_ui(self):
-        """Setup the main UI with improved design"""
+        """Setup the main UI with modern, improved design"""
         self.root = tk.Tk()
-        self.root.title("🎮 Minecraft Server Wrapper - Enhanced")
-        self.root.geometry("900x700")
-        self.root.configure(bg='#2c3e50')
+        self.root.title("🎮 Minecraft Server Wrapper - Enhanced Edition")
+        self.root.geometry("1100x800")
+        self.root.configure(bg='#1a1a1a')
+        self.root.resizable(True, True)
         
-        # Configure style
+        # Set window icon if available
+        try:
+            self.root.iconbitmap('minecraft_backg.png')
+        except:
+            pass
+        
+        # Configure modern style
         style = ttk.Style()
         style.theme_use('clam')
-        style.configure('Title.TLabel', font=('Arial', 16, 'bold'), background='#2c3e50', foreground='white')
-        style.configure('Header.TLabel', font=('Arial', 12, 'bold'), background='#34495e', foreground='white')
-        style.configure('Info.TLabel', font=('Arial', 10), background='#34495e', foreground='#ecf0f1')
         
-        # Main container
-        main_frame = ttk.Frame(self.root)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Custom color scheme
+        colors = {
+            'bg_primary': '#1a1a1a',
+            'bg_secondary': '#2d2d2d',
+            'bg_tertiary': '#3d3d3d',
+            'accent_green': '#00ff88',
+            'accent_blue': '#00aaff',
+            'accent_orange': '#ff8800',
+            'accent_red': '#ff4444',
+            'text_primary': '#ffffff',
+            'text_secondary': '#cccccc',
+            'text_muted': '#888888'
+        }
         
-        # Title
-        title_label = ttk.Label(main_frame, text="🎮 Minecraft Server Wrapper", style='Title.TLabel')
-        title_label.pack(pady=(0, 20))
+        # Store colors for later use
+        self.ui_colors = colors
         
-        # Create notebook for tabs
-        notebook = ttk.Notebook(main_frame)
-        notebook.pack(fill=tk.BOTH, expand=True)
+        # Configure ttk styles with modern colors
+        style.configure('Modern.TFrame', background=colors['bg_secondary'], relief='flat')
+        style.configure('Card.TFrame', background=colors['bg_tertiary'], relief='solid', borderwidth=1)
+        style.configure('Title.TLabel', font=('Segoe UI', 20, 'bold'), background=colors['bg_primary'], 
+                       foreground=colors['text_primary'])
+        style.configure('Header.TLabel', font=('Segoe UI', 14, 'bold'), background=colors['bg_secondary'], 
+                       foreground=colors['accent_blue'])
+        style.configure('Info.TLabel', font=('Segoe UI', 11), background=colors['bg_tertiary'], 
+                       foreground=colors['text_secondary'])
+        style.configure('Status.TLabel', font=('Segoe UI', 12, 'bold'), background=colors['bg_tertiary'])
         
-        # Server Control Tab
-        control_frame = ttk.Frame(notebook)
-        notebook.add(control_frame, text="🎮 Server Control")
+        # Modern button styles
+        style.configure('Start.TButton', font=('Segoe UI', 10, 'bold'), foreground='white')
+        style.configure('Stop.TButton', font=('Segoe UI', 10, 'bold'), foreground='white')
+        style.configure('Action.TButton', font=('Segoe UI', 10, 'bold'), foreground='white')
         
-        # Server Monitor Tab
-        monitor_frame = ttk.Frame(notebook)
-        notebook.add(monitor_frame, text="📊 Server Monitor")
+        # Main container with gradient-like effect
+        main_container = tk.Frame(self.root, bg=colors['bg_primary'])
+        main_container.pack(fill=tk.BOTH, expand=True)
         
-        # Setup control tab
-        self.setup_control_tab(control_frame)
+        # Top header with modern design
+        header_frame = tk.Frame(main_container, bg=colors['bg_primary'], height=80)
+        header_frame.pack(fill=tk.X, padx=20, pady=(20, 10))
+        header_frame.pack_propagate(False)
         
-        # Setup monitor tab
-        self.setup_monitor_tab(monitor_frame)
+        # Title with modern typography
+        title_frame = tk.Frame(header_frame, bg=colors['bg_primary'])
+        title_frame.pack(side=tk.LEFT, fill=tk.Y)
+        
+        title_label = tk.Label(title_frame, text="🎮 Minecraft Server Wrapper", 
+                              font=('Segoe UI', 24, 'bold'), 
+                              fg=colors['text_primary'], bg=colors['bg_primary'])
+        title_label.pack(anchor='w')
+        
+        subtitle_label = tk.Label(title_frame, text="Enhanced Edition - Professional Server Management", 
+                                 font=('Segoe UI', 11), 
+                                 fg=colors['text_muted'], bg=colors['bg_primary'])
+        subtitle_label.pack(anchor='w')
+        
+        # Version and status info in header
+        info_frame = tk.Frame(header_frame, bg=colors['bg_primary'])
+        info_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        version_label = tk.Label(info_frame, text=f"v{self.current_version}", 
+                                font=('Segoe UI', 10, 'bold'), 
+                                fg=colors['accent_blue'], bg=colors['bg_primary'])
+        version_label.pack(anchor='e')
+        
+        # Create modern notebook with custom styling
+        notebook_frame = tk.Frame(main_container, bg=colors['bg_primary'])
+        notebook_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 20))
+        
+        # Custom tab bar
+        tab_bar = tk.Frame(notebook_frame, bg=colors['bg_secondary'], height=50)
+        tab_bar.pack(fill=tk.X, pady=(0, 2))
+        tab_bar.pack_propagate(False)
+        
+        # Tab buttons
+        self.active_tab = 'control'
+        self.tab_buttons = {}
+        
+        tabs = [
+            ('control', '🎮 Server Control', colors['accent_green']),
+            ('monitor', '📊 Performance Monitor', colors['accent_blue']),
+            ('console', '💻 Console', colors['accent_orange']),
+            ('settings', '⚙️ Settings', colors['text_muted'])
+        ]
+        
+        for tab_id, tab_text, tab_color in tabs:
+            btn = tk.Button(tab_bar, text=tab_text, 
+                           font=('Segoe UI', 11, 'bold'),
+                           bg=colors['bg_tertiary'] if tab_id != self.active_tab else tab_color,
+                           fg=colors['text_primary'],
+                           relief='flat', bd=0, padx=20, pady=10,
+                           command=lambda t=tab_id: self.switch_tab(t))
+            btn.pack(side=tk.LEFT, padx=2)
+            self.tab_buttons[tab_id] = btn
+        
+        # Content area
+        self.content_frame = tk.Frame(notebook_frame, bg=colors['bg_primary'])
+        self.content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create all tab contents
+        self.tab_frames = {}
+        for tab_id, _, _ in tabs:
+            frame = tk.Frame(self.content_frame, bg=colors['bg_primary'])
+            self.tab_frames[tab_id] = frame
+        
+        # Setup individual tabs with modern design
+        self.setup_modern_control_tab()
+        self.setup_modern_monitor_tab()
+        self.setup_modern_console_tab()
+        self.setup_modern_settings_tab()
+        
+        # Show initial tab
+        self.switch_tab('control')
         
         # Bind window close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def switch_tab(self, tab_id):
+        """Switch between tabs with smooth transition"""
+        # Hide all tabs
+        for frame in self.tab_frames.values():
+            frame.pack_forget()
+        
+        # Update button colors
+        for btn_id, btn in self.tab_buttons.items():
+            if btn_id == tab_id:
+                btn.configure(bg=self.ui_colors['accent_blue'])
+            else:
+                btn.configure(bg=self.ui_colors['bg_tertiary'])
+        
+        # Show selected tab
+        self.tab_frames[tab_id].pack(fill=tk.BOTH, expand=True)
+        self.active_tab = tab_id
+
+    def setup_modern_control_tab(self):
+        """Setup the modern server control tab"""
+        parent = self.tab_frames['control']
+        colors = self.ui_colors
+        
+        # Main grid layout
+        main_grid = tk.Frame(parent, bg=colors['bg_primary'])
+        main_grid.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Left column - Controls and Status
+        left_column = tk.Frame(main_grid, bg=colors['bg_primary'])
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Server Status Card
+        status_card = self.create_modern_card(left_column, "🔧 Server Status", colors['accent_green'])
+        
+        self.status_indicator = tk.Frame(status_card, bg=colors['accent_red'], width=20, height=20)
+        self.status_indicator.pack(pady=10)
+        
+        self.status_label = tk.Label(status_card, text="Server Stopped", 
+                                    font=('Segoe UI', 14, 'bold'), 
+                                    fg=colors['text_primary'], bg=colors['bg_tertiary'])
+        self.status_label.pack(pady=5)
+        
+        # Quick Actions Card
+        actions_card = self.create_modern_card(left_column, "⚡ Quick Actions", colors['accent_blue'])
+        
+        # Control buttons with modern styling
+        button_grid = tk.Frame(actions_card, bg=colors['bg_tertiary'])
+        button_grid.pack(fill=tk.X, pady=10)
+        
+        # Row 1
+        row1 = tk.Frame(button_grid, bg=colors['bg_tertiary'])
+        row1.pack(fill=tk.X, pady=5)
+        
+        self.start_button = self.create_modern_button(row1, "▶ Start Server", colors['accent_green'], 
+                                                     self.start_server)
+        self.start_button.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        self.stop_button = self.create_modern_button(row1, "⏹ Stop Server", colors['accent_red'], 
+                                                    self.stop_server)
+        self.stop_button.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Row 2
+        row2 = tk.Frame(button_grid, bg=colors['bg_tertiary'])
+        row2.pack(fill=tk.X, pady=5)
+        
+        self.restart_button = self.create_modern_button(row2, "🔄 Restart", colors['accent_orange'], 
+                                                       self.restart_server)
+        self.restart_button.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        self.clean_ram_button = self.create_modern_button(row2, "🧹 Clean RAM", colors['accent_blue'], 
+                                                         self.optimize_ram)
+        self.clean_ram_button.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Row 3
+        row3 = tk.Frame(button_grid, bg=colors['bg_tertiary'])
+        row3.pack(fill=tk.X, pady=5)
+        
+        self.web_button = self.create_modern_button(row3, "🌐 Web Interface", colors['accent_blue'], 
+                                                   self.open_web_interface)
+        self.web_button.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        self.update_button = self.create_modern_button(row3, "🔄 Check Updates", colors['text_muted'], 
+                                                      lambda: self.check_for_updates(manual=True))
+        self.update_button.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Right column - Configuration
+        right_column = tk.Frame(main_grid, bg=colors['bg_primary'])
+        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
+        
+        # Configuration Card
+        config_card = self.create_modern_card(right_column, "⚙️ Server Configuration", colors['accent_orange'])
+        
+        # Server JAR configuration
+        jar_frame = tk.Frame(config_card, bg=colors['bg_tertiary'])
+        jar_frame.pack(fill=tk.X, pady=10)
+        
+        tk.Label(jar_frame, text="Server JAR File:", font=('Segoe UI', 11, 'bold'), 
+                fg=colors['text_primary'], bg=colors['bg_tertiary']).pack(anchor='w')
+        
+        jar_input_frame = tk.Frame(jar_frame, bg=colors['bg_tertiary'])
+        jar_input_frame.pack(fill=tk.X, pady=5)
+        
+        self.jar_entry = tk.Entry(jar_input_frame, font=('Segoe UI', 10), 
+                                 bg=colors['bg_secondary'], fg=colors['text_primary'], 
+                                 relief='flat', bd=5)
+        self.jar_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        
+        browse_btn = self.create_modern_button(jar_input_frame, "📁 Browse", colors['accent_blue'], 
+                                              self.browse_jar, width=10)
+        browse_btn.pack(side=tk.RIGHT)
+        
+        # Memory configuration
+        memory_frame = tk.Frame(config_card, bg=colors['bg_tertiary'])
+        memory_frame.pack(fill=tk.X, pady=10)
+        
+        tk.Label(memory_frame, text="Memory Settings:", font=('Segoe UI', 11, 'bold'), 
+                fg=colors['text_primary'], bg=colors['bg_tertiary']).pack(anchor='w')
+        
+        memory_inputs = tk.Frame(memory_frame, bg=colors['bg_tertiary'])
+        memory_inputs.pack(fill=tk.X, pady=5)
+        
+        # Min memory
+        min_frame = tk.Frame(memory_inputs, bg=colors['bg_tertiary'])
+        min_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        
+        tk.Label(min_frame, text="Min RAM:", font=('Segoe UI', 10), 
+                fg=colors['text_secondary'], bg=colors['bg_tertiary']).pack(anchor='w')
+        self.min_memory_entry = tk.Entry(min_frame, font=('Segoe UI', 10), 
+                                        bg=colors['bg_secondary'], fg=colors['text_primary'], 
+                                        relief='flat', bd=5)
+        self.min_memory_entry.pack(fill=tk.X)
+        
+        # Max memory
+        max_frame = tk.Frame(memory_inputs, bg=colors['bg_tertiary'])
+        max_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        tk.Label(max_frame, text="Max RAM:", font=('Segoe UI', 10), 
+                fg=colors['text_secondary'], bg=colors['bg_tertiary']).pack(anchor='w')
+        self.max_memory_entry = tk.Entry(max_frame, font=('Segoe UI', 10), 
+                                        bg=colors['bg_secondary'], fg=colors['text_primary'], 
+                                        relief='flat', bd=5)
+        self.max_memory_entry.pack(fill=tk.X)
+        
+        # Load configuration into UI
+        self.load_config_to_ui()
+
+    def setup_modern_monitor_tab(self):
+        """Setup the modern performance monitor tab"""
+        parent = self.tab_frames['monitor']
+        colors = self.ui_colors
+        
+        # Main container
+        main_container = tk.Frame(parent, bg=colors['bg_primary'])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Performance metrics grid
+        metrics_grid = tk.Frame(main_container, bg=colors['bg_primary'])
+        metrics_grid.pack(fill=tk.X, pady=(0, 20))
+        
+        # Create metric cards in a 2x3 grid
+        metrics = [
+            ('cpu', '💻', 'CPU Usage', '0%', colors['accent_blue']),
+            ('ram', '🧠', 'System RAM', '0%', colors['accent_green']),
+            ('server_ram', '⚡', 'Server RAM', '0 MB', colors['accent_orange']),
+            ('tps', '⏱️', 'Server TPS', '20.0', colors['accent_green']),
+            ('players', '👥', 'Online Players', '0', colors['accent_blue']),
+            ('uptime', '⏰', 'Uptime', '0 min', colors['text_muted'])
+        ]
+        
+        self.metric_labels = {}
+        self.metric_bars = {}
+        
+        for i, (key, icon, label, value, color) in enumerate(metrics):
+            row = i // 3
+            col = i % 3
+            
+            metric_card = tk.Frame(metrics_grid, bg=colors['bg_tertiary'], relief='solid', bd=1)
+            metric_card.grid(row=row, column=col, padx=10, pady=10, sticky='ew')
+            
+            # Configure grid weights
+            metrics_grid.grid_columnconfigure(col, weight=1)
+            
+            # Icon and label
+            header = tk.Frame(metric_card, bg=colors['bg_tertiary'])
+            header.pack(fill=tk.X, padx=15, pady=(15, 5))
+            
+            tk.Label(header, text=icon, font=('Segoe UI', 20), 
+                    fg=color, bg=colors['bg_tertiary']).pack(side=tk.LEFT)
+            
+            tk.Label(header, text=label, font=('Segoe UI', 11, 'bold'), 
+                    fg=colors['text_secondary'], bg=colors['bg_tertiary']).pack(side=tk.LEFT, padx=(10, 0))
+            
+            # Value
+            value_label = tk.Label(metric_card, text=value, font=('Segoe UI', 16, 'bold'), 
+                                  fg=colors['text_primary'], bg=colors['bg_tertiary'])
+            value_label.pack(pady=(0, 10))
+            self.metric_labels[key] = value_label
+            
+            # Progress bar for percentage metrics
+            if key in ['cpu', 'ram']:
+                bar_frame = tk.Frame(metric_card, bg=colors['bg_secondary'], height=8)
+                bar_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
+                bar_frame.pack_propagate(False)
+                
+                progress_bar = tk.Frame(bar_frame, bg=color, height=8)
+                progress_bar.pack(side=tk.LEFT)
+                self.metric_bars[key] = progress_bar
+        
+        # Performance history chart placeholder
+        chart_card = self.create_modern_card(main_container, "📈 Performance History", colors['accent_blue'])
+        
+        chart_placeholder = tk.Label(chart_card, text="📊 Real-time performance charts\ncoming in future updates!", 
+                                    font=('Segoe UI', 12), fg=colors['text_muted'], 
+                                    bg=colors['bg_tertiary'], justify='center')
+        chart_placeholder.pack(expand=True, fill=tk.BOTH, pady=20)
+
+    def setup_modern_console_tab(self):
+        """Setup the modern console tab"""
+        parent = self.tab_frames['console']
+        colors = self.ui_colors
+        
+        # Main container
+        main_container = tk.Frame(parent, bg=colors['bg_primary'])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Console card
+        console_card = self.create_modern_card(main_container, "💻 Server Console", colors['accent_orange'])
+        
+        # Console output
+        self.console_text = scrolledtext.ScrolledText(
+            console_card, 
+            height=20, 
+            bg='#0d1117', 
+            fg='#58a6ff', 
+            font=('Consolas', 11),
+            relief='flat',
+            bd=0,
+            insertbackground='#58a6ff',
+            selectbackground='#264f78'
+        )
+        self.console_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Command input
+        command_frame = tk.Frame(console_card, bg=colors['bg_tertiary'])
+        command_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        
+        tk.Label(command_frame, text="Command:", font=('Segoe UI', 11, 'bold'), 
+                fg=colors['text_primary'], bg=colors['bg_tertiary']).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.command_entry = tk.Entry(command_frame, font=('Segoe UI', 11), 
+                                     bg=colors['bg_secondary'], fg=colors['text_primary'], 
+                                     relief='flat', bd=5)
+        self.command_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 10))
+        self.command_entry.bind('<Return>', lambda e: self.send_command())
+        
+        send_btn = self.create_modern_button(command_frame, "Send", colors['accent_blue'], 
+                                           self.send_command, width=8)
+        send_btn.pack(side=tk.RIGHT)
+
+    def setup_modern_settings_tab(self):
+        """Setup the modern settings tab"""
+        parent = self.tab_frames['settings']
+        colors = self.ui_colors
+        
+        # Main container
+        main_container = tk.Frame(parent, bg=colors['bg_primary'])
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Settings card
+        settings_card = self.create_modern_card(main_container, "⚙️ Application Settings", colors['text_muted'])
+        
+        settings_placeholder = tk.Label(settings_card, 
+                                       text="🔧 Advanced settings panel\ncoming in future updates!\n\nFor now, use the Configuration\nsection in Server Control tab.", 
+                                       font=('Segoe UI', 12), fg=colors['text_muted'], 
+                                       bg=colors['bg_tertiary'], justify='center')
+        settings_placeholder.pack(expand=True, fill=tk.BOTH, pady=20)
+
+    def create_modern_card(self, parent, title, accent_color):
+        """Create a modern card with title and accent color"""
+        colors = self.ui_colors
+        
+        # Card container
+        card = tk.Frame(parent, bg=colors['bg_tertiary'], relief='solid', bd=1)
+        card.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Header with accent color
+        header = tk.Frame(card, bg=accent_color, height=40)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        
+        title_label = tk.Label(header, text=title, font=('Segoe UI', 12, 'bold'), 
+                              fg='white', bg=accent_color)
+        title_label.pack(expand=True)
+        
+        # Content area
+        content = tk.Frame(card, bg=colors['bg_tertiary'])
+        content.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        return content
+
+    def create_modern_button(self, parent, text, color, command, width=None):
+        """Create a modern styled button"""
+        colors = self.ui_colors
+        
+        btn = tk.Button(parent, text=text, font=('Segoe UI', 10, 'bold'), 
+                       bg=color, fg='white', relief='flat', bd=0, 
+                       command=command, cursor='hand2')
+        
+        if width:
+            btn.configure(width=width)
+        
+        # Hover effects
+        def on_enter(e):
+            btn.configure(bg=self.lighten_color(color))
+        
+        def on_leave(e):
+            btn.configure(bg=color)
+        
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+        
+        return btn
+
+    def lighten_color(self, color):
+        """Lighten a hex color for hover effects"""
+        if color.startswith('#'):
+            color = color[1:]
+        
+        # Convert to RGB
+        r = int(color[0:2], 16)
+        g = int(color[2:4], 16)
+        b = int(color[4:6], 16)
+        
+        # Lighten by 20%
+        r = min(255, int(r * 1.2))
+        g = min(255, int(g * 1.2))
+        b = min(255, int(b * 1.2))
+        
+        return f"#{r:02x}{g:02x}{b:02x}"
 
     def setup_control_tab(self, parent):
         """Setup the server control tab"""
@@ -957,13 +1388,27 @@ class MinecraftServerWrapper:
             <style>
                 body {{
                     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: url('/static/minecraft_backg.png') center center fixed;
+                    background-size: cover;
+                    background-repeat: no-repeat;
+                    background-attachment: fixed;
                     margin: 0;
                     padding: 0;
                     min-height: 100vh;
                     display: flex;
                     align-items: center;
                     justify-content: center;
+                    position: relative;
+                }}
+                body::before {{
+                    content: '';
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.4);
+                    z-index: -1;
                 }}
                 .login-container {{
                     background: white;
@@ -1081,13 +1526,27 @@ class MinecraftServerWrapper:
             <style>
                 body {{
                     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: url('/static/minecraft_backg.png') center center fixed;
+                    background-size: cover;
+                    background-repeat: no-repeat;
+                    background-attachment: fixed;
                     margin: 0;
                     padding: 0;
                     min-height: 100vh;
                     display: flex;
                     align-items: center;
                     justify-content: center;
+                    position: relative;
+                }}
+                body::before {{
+                    content: '';
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0, 0, 0, 0.4);
+                    z-index: -1;
                 }}
                 .register-container {{
                     background: white;
@@ -1488,10 +1947,84 @@ class MinecraftServerWrapper:
         
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: url('/static/minecraft_backg.png') center center fixed;
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            color: black;
             min-height: 100vh;
             line-height: 1.6;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(20, 30, 48, 0.9) 0%, 
+                rgba(30, 40, 60, 0.85) 25%, 
+                rgba(40, 50, 70, 0.8) 50%, 
+                rgba(30, 40, 60, 0.85) 75%, 
+                rgba(20, 30, 48, 0.9) 100%);
+            backdrop-filter: blur(8px);
+            z-index: -1;
+            transition: all 0.3s ease;
+        }
+        
+        /* Light mode styles */
+        body.light-mode {
+            color: #333;
+        }
+        
+        body.light-mode::before {
+            background: linear-gradient(135deg, 
+                rgba(240, 248, 255, 0.9) 0%, 
+                rgba(230, 240, 250, 0.85) 25%, 
+                rgba(220, 235, 255, 0.8) 50%, 
+                rgba(230, 240, 250, 0.85) 75%, 
+                rgba(240, 248, 255, 0.9) 100%);
+            backdrop-filter: blur(8px);
+        }
+        
+        /* Theme toggle button */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50px;
+            padding: 12px 20px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            color: #333;
+        }
+        
+        body.light-mode .theme-toggle:hover {
+            background: rgba(0, 0, 0, 0.2);
         }
         
         .container {
@@ -1503,7 +2036,7 @@ class MinecraftServerWrapper:
         }
         
         .sidebar {
-            width: 280px;
+            width: 300px;
             flex-shrink: 0;
             display: flex;
             flex-direction: column;
@@ -1516,33 +2049,49 @@ class MinecraftServerWrapper:
         }
         
         .sidebar-card {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
             padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(15px);
             transition: all 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
         
         .sidebar-card:hover {
-            background: rgba(255, 255, 255, 0.15);
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        body.light-mode .sidebar-card {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        body.light-mode .sidebar-card:hover {
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
         }
         
         .sidebar-card h3 {
             margin: 0 0 20px 0;
             font-size: 1.3em;
             font-weight: 600;
-            color: white;
+            color: black;
             text-align: center;
+        }
+        
+        body.light-mode .sidebar-card h3 {
+            color: #333;
         }
         
         .sidebar-btn {
             width: 100%;
             padding: 15px 20px;
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             cursor: pointer;
             font-size: 14px;
             font-weight: 600;
@@ -1553,12 +2102,13 @@ class MinecraftServerWrapper:
             text-decoration: none;
             display: block;
             text-align: center;
-            color: white;
+            color: black;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
         
         .sidebar-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
         }
         
         .sidebar-btn:last-child {
@@ -1578,11 +2128,17 @@ class MinecraftServerWrapper:
         }
         
         .sidebar-info {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
             padding: 15px;
             margin-top: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+        }
+        
+        body.light-mode .sidebar-info {
+            background: rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.1);
         }
         
         .sidebar-info p {
@@ -1592,13 +2148,24 @@ class MinecraftServerWrapper:
             line-height: 1.4;
         }
         
+        body.light-mode .sidebar-info p {
+            color: rgba(0, 0, 0, 0.7);
+        }
+        
         .header {
             text-align: center;
             margin-bottom: 30px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
+            padding: 25px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        body.light-mode .header {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.9);
         }
         
         .header h1 {
@@ -1606,6 +2173,16 @@ class MinecraftServerWrapper:
             font-weight: 700;
             margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            color: white;
+        }
+        
+        body.light-mode .header h1 {
+            color: #333;
+            text-shadow: 2px 2px 4px rgba(255,255,255,0.3);
+        }
+        
+        body.light-mode .header p {
+            color: #666;
         }
         
         .dashboard-grid {
@@ -1632,16 +2209,26 @@ class MinecraftServerWrapper:
         
         .card {
             background: rgba(255, 255, 255, 0.15);
-            border-radius: 15px;
+            border-radius: 20px;
             padding: 25px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
         
         .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        body.light-mode .card {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+        
+        body.light-mode .card:hover {
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
         }
         
         .card h3 {
@@ -1651,6 +2238,11 @@ class MinecraftServerWrapper:
             display: flex;
             align-items: center;
             gap: 10px;
+            color: white;
+        }
+        
+        body.light-mode .card h3 {
+            color: #333;
         }
         
         .status-details {
@@ -1996,6 +2588,12 @@ class MinecraftServerWrapper:
     </style>
 </head>
 <body>
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-text">Dark Mode</span>
+    </button>
+    
     <div class="container">
         <!-- Left Sidebar -->
         <div class="sidebar">
@@ -2167,6 +2765,50 @@ class MinecraftServerWrapper:
     <script>
         // Initialize Socket.IO for real-time updates
         const socket = io();
+        
+        // Theme management
+        function toggleTheme() {
+            const body = document.body;
+            const themeIcon = document.getElementById('theme-icon');
+            const themeText = document.getElementById('theme-text');
+            
+            if (body.classList.contains('light-mode')) {
+                // Switch to dark mode
+                body.classList.remove('light-mode');
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark Mode';
+                localStorage.setItem('theme', 'dark');
+                showNotification('Switched to Dark Mode', 'info');
+            } else {
+                // Switch to light mode
+                body.classList.add('light-mode');
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light Mode';
+                localStorage.setItem('theme', 'light');
+                showNotification('Switched to Light Mode', 'info');
+            }
+        }
+        
+        // Load saved theme on page load
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const body = document.body;
+            const themeIcon = document.getElementById('theme-icon');
+            const themeText = document.getElementById('theme-text');
+            
+            if (savedTheme === 'light') {
+                body.classList.add('light-mode');
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light Mode';
+            } else {
+                body.classList.remove('light-mode');
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark Mode';
+            }
+        }
+        
+        // Load theme when page loads
+        document.addEventListener('DOMContentLoaded', loadTheme);
         
         // Socket event listeners
         socket.on('connect', function() {
@@ -2425,10 +3067,99 @@ class MinecraftServerWrapper:
         
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: url('/static/minecraft_backg.png') center center fixed;
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
             color: white;
             min-height: 100vh;
             line-height: 1.6;
+            position: relative;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(20, 30, 48, 0.9) 0%, 
+                rgba(30, 40, 60, 0.85) 25%, 
+                rgba(40, 50, 70, 0.8) 50%, 
+                rgba(30, 40, 60, 0.85) 75%, 
+                rgba(20, 30, 48, 0.9) 100%);
+            backdrop-filter: blur(8px);
+            z-index: -1;
+            transition: all 0.3s ease;
+        }
+        
+        /* Theme Toggle Button */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50px;
+            padding: 12px 20px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Light Mode Styles */
+        body.light-mode {
+            color: #2c3e50;
+        }
+        
+        body.light-mode::before {
+            background: linear-gradient(135deg, 
+                rgba(240, 248, 255, 0.9) 0%, 
+                rgba(230, 240, 250, 0.85) 25%, 
+                rgba(220, 235, 255, 0.8) 50%, 
+                rgba(230, 240, 250, 0.85) 75%, 
+                rgba(240, 248, 255, 0.9) 100%);
+            backdrop-filter: blur(8px);
+        }
+        
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.15);
+            border-color: rgba(0, 0, 0, 0.3);
+            color: #2c3e50;
+        }
+        
+        body.light-mode .theme-toggle:hover {
+            background: rgba(0, 0, 0, 0.25);
+        }
+        
+        body.light-mode .header,
+        body.light-mode .file-manager,
+        body.light-mode .nav-btn,
+        body.light-mode .btn,
+        body.light-mode .file-item,
+        body.light-mode .breadcrumb-nav,
+        body.light-mode .drop-zone {
+            background: rgba(255, 255, 255, 0.2);
+            color: #2c3e50;
+        }
+        
+        body.light-mode .file-list {
+            background: rgba(255, 255, 255, 0.3);
         }
         
         .container {
@@ -2771,7 +3502,7 @@ class MinecraftServerWrapper:
         }
         
         .modal-content {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: rgba(0, 0, 0, 0.9);
             margin: 2% auto;
             padding: 0;
             border-radius: 15px;
@@ -2781,6 +3512,7 @@ class MinecraftServerWrapper:
             display: flex;
             flex-direction: column;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
         }
         
         .modal-header {
@@ -2928,6 +3660,12 @@ class MinecraftServerWrapper:
     </style>
 </head>
 <body>
+    <!-- Theme Toggle Button -->
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-text">Dark Mode</span>
+    </button>
+    
     <div class="container">
         <div class="header">
             <div class="header-content">
@@ -3406,6 +4144,50 @@ class MinecraftServerWrapper:
                 closeFileModal();
             }
         });
+        
+        // Theme management
+        function toggleTheme() {
+            const body = document.body;
+            const themeIcon = document.getElementById('theme-icon');
+            const themeText = document.getElementById('theme-text');
+            
+            if (body.classList.contains('light-mode')) {
+                // Switch to dark mode
+                body.classList.remove('light-mode');
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark Mode';
+                localStorage.setItem('theme', 'dark');
+                showNotification('Switched to Dark Mode', 'info');
+            } else {
+                // Switch to light mode
+                body.classList.add('light-mode');
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light Mode';
+                localStorage.setItem('theme', 'light');
+                showNotification('Switched to Light Mode', 'info');
+            }
+        }
+        
+        // Load saved theme on page load
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const body = document.body;
+            const themeIcon = document.getElementById('theme-icon');
+            const themeText = document.getElementById('theme-text');
+            
+            if (savedTheme === 'light') {
+                body.classList.add('light-mode');
+                themeIcon.textContent = '☀️';
+                themeText.textContent = 'Light Mode';
+            } else {
+                body.classList.remove('light-mode');
+                themeIcon.textContent = '🌙';
+                themeText.textContent = 'Dark Mode';
+            }
+        }
+        
+        // Load theme when page loads
+        document.addEventListener('DOMContentLoaded', loadTheme);
         
         // Load file list on page load
         setTimeout(() => {
@@ -4163,6 +4945,24 @@ class MinecraftServerWrapper:
             return None
             
         return filename.strip()
+
+        # Static file route for background image
+        @self.web_server.route('/static/<filename>')
+        def serve_static(filename):
+            """Serve static files like background images"""
+            try:
+                # Only allow specific image files for security
+                allowed_files = ['minecraft_backg.png']
+                if filename not in allowed_files:
+                    return "File not found", 404
+                
+                file_path = os.path.join(self.server_directory, filename)
+                if os.path.exists(file_path):
+                    return send_file(file_path)
+                else:
+                    return "File not found", 404
+            except Exception as e:
+                return f"Error serving file: {str(e)}", 500
 
     def setup_socketio_events(self):
         """Setup Socket.IO event handlers"""
